@@ -1,13 +1,12 @@
 /**
  * 인덱서 워커: 웹 서버와 별도 프로세스로 실행된다.
- * - 소스 스캔(전체·하위 폴더), 변경 감지(chokidar/FSEvents), 주기적 재검사
+ * - 소스 스캔(전체·하위 폴더), 변경 감지(FSEvents), 주기적 재검사
  * - 외장 디스크 연결·분리 감지
  * - 실패 항목 재시도, DB 자동 백업
  * - 웹에서 넣은 명령(commands 테이블) 처리
  */
 import fs from "node:fs";
 import path from "node:path";
-import chokidar, { type FSWatcher } from "chokidar";
 import { and, eq, gte, isNull, sql } from "drizzle-orm";
 import { applyRetention, createBackup, flushPending, listBackups, PENDING_DIR, realBackupEnv } from "@/server/backup";
 import { runEnvCheck } from "@/lib/env-check";
@@ -28,7 +27,7 @@ const log = (...a: unknown[]) => console.log(new Date().toLocaleString("ko-KR"),
 type Task = { sourceId: number; scope?: string };
 const queue: Task[] = [];
 let current: Task | null = null;
-const watchers = new Map<number, FSWatcher>();
+const watchers = new Map<number, fs.FSWatcher>();
 const online = new Map<number, boolean>();
 
 function setRuntime(key: string, value: unknown) {
@@ -73,6 +72,11 @@ function scheduleSubtree(sourceId: number, dir: string) {
   );
 }
 
+/**
+ * 변경 감지: macOS FSEvents 기반 재귀 감시 (소스당 핸들 1개).
+ * 폴더마다 핸들을 여는 방식은 큰 폴더(수만 개)에서 파일 핸들이 부족해진다.
+ * 이벤트는 경로 단위로 2초 모았다가 처리한다. 파일이 있으면 다시 색인하고, 없거나 폴더면 그 폴더를 다시 확인한다.
+ */
 function startWatcher(src: typeof sources.$inferSelect) {
   if (watchers.has(src.id)) return;
   const settings = getSettings(db);
@@ -82,33 +86,51 @@ function startWatcher(src: typeof sources.$inferSelect) {
     .all()
     .map((r) => r.rootPath)
     .filter((r) => r !== src.rootPath && isInside(r, src.rootPath));
-  const w = chokidar.watch(src.rootPath, {
-    ignoreInitial: true,
-    followSymlinks: false,
-    awaitWriteFinish: { stabilityThreshold: 2000, pollInterval: 500 },
-    ignored: (p: string) =>
-      p !== src.rootPath && (isExcludedName(path.basename(p), settings.excludedPatterns) || isExcludedFolder(p, settings.excludedFolders) || nested.some((n) => isInside(p, n))),
-  });
-  const onFile = async (p: string) => {
-    try {
-      const st = fs.statSync(p);
-      if (st.isFile()) await processFile(db, src, p, st, deps);
-    } catch {
-      // 곧바로 사라진 파일은 하위 폴더 확인에서 처리
+  const ignored = (p: string) => {
+    const rel = p.slice(src.rootPath.length + 1).split("/");
+    return (
+      rel.some((seg) => isExcludedName(seg, settings.excludedPatterns)) || isExcludedFolder(p, settings.excludedFolders) || nested.some((n) => isInside(p, n))
+    );
+  };
+  const pending = new Set<string>();
+  let timer: NodeJS.Timeout | null = null;
+  const flush = async () => {
+    timer = null;
+    const paths = [...pending];
+    pending.clear();
+    for (const p of paths) {
+      let st: fs.Stats;
+      try {
+        st = fs.lstatSync(p);
+      } catch {
+        // 사라짐: 삭제는 바로 반영하지 않고, 그 폴더를 끝까지 다시 확인한 뒤 판단한다 (삭제 판단 규칙)
+        scheduleSubtree(src.id, path.dirname(p));
+        continue;
+      }
+      if (st.isSymbolicLink()) continue; // 스캔과 같은 규칙: 심볼릭 링크는 따라가지 않는다
+      if (st.isDirectory()) scheduleSubtree(src.id, p);
+      else if (st.isFile()) await processFile(db, src, p, fs.statSync(p), deps).catch((e) => log("변경 처리 오류", p, String(e)));
     }
   };
-  w.on("add", onFile)
-    .on("change", onFile)
-    .on("addDir", (p) => scheduleSubtree(src.id, p))
-    // 삭제는 바로 반영하지 않고, 해당 폴더를 끝까지 다시 확인한 뒤 판단한다 (삭제 판단 규칙)
-    .on("unlink", (p) => scheduleSubtree(src.id, path.dirname(p)))
-    .on("unlinkDir", (p) => scheduleSubtree(src.id, path.dirname(p)))
-    .on("error", (e) => log("감시 오류", src.name, String(e)));
+  let w: fs.FSWatcher;
+  try {
+    w = fs.watch(src.rootPath, { recursive: true, persistent: true }, (_event, filename) => {
+      if (!filename) return;
+      const p = path.join(src.rootPath, filename.toString());
+      if (ignored(p)) return;
+      pending.add(p);
+      if (!timer) timer = setTimeout(() => void flush(), 2000);
+    });
+  } catch (e) {
+    log("감시 시작 실패", src.name, String(e));
+    return;
+  }
+  w.on("error", (e) => log("감시 오류", src.name, String(e)));
   watchers.set(src.id, w);
 }
 
 async function stopWatcher(id: number) {
-  await watchers.get(id)?.close();
+  watchers.get(id)?.close();
   watchers.delete(id);
 }
 

@@ -3,7 +3,7 @@ import fs from "node:fs";
 import fsp from "node:fs/promises";
 import path from "node:path";
 import { and, eq, inArray, lt, ne, sql } from "drizzle-orm";
-import { isDataless as realIsDataless } from "@/lib/fs/dataless";
+import { isMaterializeRefused, isDataless as realIsDataless } from "@/lib/fs/dataless";
 import type { Db } from "../db";
 import { folders, itemErrors, itemLinks, items, itemTags, scanJobs, sources, tags } from "../db/schema";
 import { extractText, isExtractable, kindOf } from "../extract";
@@ -289,7 +289,11 @@ export async function processFile(
       buf = await deps.readFile(p);
     } catch (e) {
       const code = (e as NodeJS.ErrnoException).code;
-      if (code === "EACCES" || code === "EPERM") {
+      if (isMaterializeRefused(e)) {
+        // iCloud 에만 있는 파일을 백그라운드에서 읽으려 한 경우: 오류가 아니라 cloud_only
+        state = "cloud_only";
+        hash = null;
+      } else if (code === "EACCES" || code === "EPERM") {
         state = "no_permission";
         error = { kind: "no_permission", message: "읽기 권한이 없습니다." };
       } else {

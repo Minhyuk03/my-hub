@@ -19,6 +19,7 @@ async function corpus() {
   write(root, "노션만.md", "노션 워크스페이스 정리");
   write(root, "CLAUDE CODE 사용기.md", "claude code 세션 기록과 2026년 9월 계획");
   write(root, "회의적인 의견.md", "이 방식에는 회의적이다");
+  write(root, "메모장.md", "지난 회의 내용 정리");
   const src = addSource(db, root);
   await runScan(db, src.id, deps());
   return db;
@@ -29,8 +30,9 @@ describe("한국어 검색 B2 (4장 검증 사례)", () => {
   it("회의 (2글자): 붙여 쓴 경우 포함, 제목 일치가 먼저", async () => {
     const db = await corpus();
     const r = search(db, "회의");
-    expect(titles(r)).toEqual(["주간회의록 2026-09-28", "팀 회의록", "회의 준비 메모", "회의적인 의견"].sort());
-    expect(r.hits[r.hits.length - 1].title).not.toBe("주간회의록 2026-09-28");
+    expect(titles(r)).toEqual(["메모장", "주간회의록 2026-09-28", "팀 회의록", "회의 준비 메모", "회의적인 의견"].sort());
+    // 본문에만 있는 항목은 제목에 있는 항목보다 뒤
+    expect(r.hits[r.hits.length - 1].title).toBe("메모장");
   });
   it("회의록: 주간회의록 포함", async () => {
     const db = await corpus();

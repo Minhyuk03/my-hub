@@ -16,12 +16,14 @@ import { getDb } from "@/server/db";
 import { isLocalRequest } from "@/server/http/local";
 import { extractText, isExtractable } from "@/server/extract";
 import { resolveItemFile } from "@/server/items/access";
+import { materialize } from "@/lib/fs/dataless";
 import { getItem } from "@/server/queries";
 import { projectList, projectsForItem } from "@/server/projects";
 import { ItemProjects } from "./item-projects";
 import { enqueue } from "@/server/sources/manage";
 import { getSettings } from "@/server/settings";
 import { LocalOpenButtons } from "./open-buttons";
+import { AutoRefresh } from "@/app/status/auto-refresh";
 
 const LANG: Record<string, string> = { ts: "typescript", tsx: "tsx", js: "javascript", jsx: "jsx", mjs: "javascript", cjs: "javascript", py: "python", rb: "ruby", rs: "rust", kt: "kotlin", sh: "bash", zsh: "bash", yml: "yaml", md: "markdown", h: "c", hpp: "cpp" };
 const MAX_PREVIEW = 200_000;
@@ -53,8 +55,8 @@ export default async function ItemPage({ params, searchParams }: PageProps<"/ite
   if (load && available && item.state === "cloud_only" && isExtractable(item.ext)) {
     const r = resolveItemFile(db, item.id);
     if (r.ok) {
-      body = await fs.promises
-        .readFile(r.path, { signal: AbortSignal.timeout(30_000) })
+      body = await materialize(r.path, 20_000)
+        .then((ok) => (ok ? fs.promises.readFile(r.path, { signal: AbortSignal.timeout(30_000) }) : Promise.reject(new Error("아직"))))
         .then((buf) => extractText(item.ext, buf))
         .then((x) => x.body)
         .catch(() => "");
@@ -85,7 +87,12 @@ export default async function ItemPage({ params, searchParams }: PageProps<"/ite
   } else if (item.kind === "pdf") {
     preview = <iframe src={fileUrl} title={item.title} className="h-[75vh] w-full rounded-md border" />;
   } else if (item.state === "cloud_only" && !body) {
-    preview = <p className="text-sm text-muted-foreground">iCloud에서 받아오지 못했습니다. 잠시 후 다시 시도하세요.</p>;
+    preview = (
+      <p className="text-sm text-muted-foreground">
+        iCloud에서 받아오는 중입니다. 받아오면 자동으로 표시됩니다. (파일이 크거나 iCloud가 느리면 몇 분 걸릴 수 있습니다)
+        <AutoRefresh seconds={4} />
+      </p>
+    );
   } else if (body && item.kind === "note") {
     preview = (
       <article className="prose-hub max-w-none break-words">

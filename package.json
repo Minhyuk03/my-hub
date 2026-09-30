@@ -18,12 +18,12 @@
     "service:install": "bash scripts/service/install.sh",
     "service:uninstall": "bash scripts/service/uninstall.sh",
     "service:restart": "bash scripts/service/restart.sh",
-    "service:status": "bash scripts/service/status.sh"
+    "service:status": "bash scripts/service/status.sh",
+    "build:native": "bash scripts/service/build-native.sh"
   },
   "dependencies": {
     "@base-ui/react": "^1.8.0",
     "better-sqlite3": "^13.0.3",
-    "chokidar": "^5.0.0",
     "class-variance-authority": "^0.7.1",
     "cmdk": "^1.1.1",
     "cn": "^0.4.0",

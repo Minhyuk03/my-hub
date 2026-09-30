@@ -42,6 +42,8 @@ write_plist() { # 이름, 실행할 파일
   <key>RunAtLoad</key><true/>
   <key>KeepAlive</key><true/>
   <key>ThrottleInterval</key><integer>10</integer>
+  <key>SoftResourceLimits</key><dict><key>NumberOfFiles</key><integer>65536</integer></dict>
+  <key>HardResourceLimits</key><dict><key>NumberOfFiles</key><integer>65536</integer></dict>
   <key>StandardOutPath</key><string>$LOGS/$1.log</string>
   <key>StandardErrorPath</key><string>$LOGS/$1.log</string>
 </dict>
@@ -54,6 +56,8 @@ write_plist web server.ts
 write_plist worker worker/index.ts
 for n in web worker; do
   launchctl bootout "gui/$UID_/com.myhub.$n" 2>/dev/null || true
-  launchctl bootstrap "gui/$UID_" "$AGENTS/com.myhub.$n.plist"
+  # 이전 프로세스가 완전히 끝날 때까지 기다린다 (워커는 진행 중인 작업을 저장하고 끝나는 데 몇 초 걸림)
+  for i in $(seq 1 20); do launchctl print "gui/$UID_/com.myhub.$n" >/dev/null 2>&1 || break; sleep 1; done
+  launchctl bootstrap "gui/$UID_" "$AGENTS/com.myhub.$n.plist" || { sleep 3; launchctl bootstrap "gui/$UID_" "$AGENTS/com.myhub.$n.plist"; }
 done
 echo "완료. 로그: $LOGS  /  http://127.0.0.1:3000"
