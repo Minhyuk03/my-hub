@@ -11,6 +11,11 @@ import { getSettings } from "@/server/settings";
 import { removeSourceAction, saveSettings, shortcuts } from "./actions";
 import { ConfirmSubmit } from "./confirm-submit";
 import { FolderPicker } from "./folder-picker";
+import { PasscodeForm } from "./passcode-form";
+import { saveAllowlist } from "./security-actions";
+import { headers } from "next/headers";
+import { isLocalRequest } from "@/server/http/local";
+import { tailscaleSelf, tailscaleServeStatus } from "@/server/http/tailscale";
 
 function NumField({ name, label, value, unit }: { name: string; label: string; value: number; unit: string }) {
   return (
@@ -30,6 +35,9 @@ export default async function SettingsPage() {
   const s = getSettings(db);
   const srcs = sourcesWithStats(db);
   const sc = await shortcuts();
+  const local = isLocalRequest(await headers());
+  const ts = local ? tailscaleSelf() : null;
+  const serve = local ? tailscaleServeStatus() : "";
 
   return (
     <div className="space-y-4">
@@ -50,7 +58,7 @@ export default async function SettingsPage() {
               <SourceStatusBadge status={src.status} />
               <span className="w-full truncate pl-6 text-xs text-muted-foreground sm:w-auto sm:pl-0">{shortPath(src.rootPath)}</span>
               <form action={removeSourceAction.bind(null, src.id)} className="ml-auto">
-                <ConfirmSubmit message={`'${src.name}' 을(를) 인덱싱에서 뺄까요? 실제 파일은 그대로 남습니다.`}>등록 해제</ConfirmSubmit>
+                <ConfirmSubmit message={`'${src.name}' 을(를) 인덱싱에서 뺄까요? 실제 파일은 그대로 남습니다. 이 폴더들에 걸린 프로젝트 연결도 함께 해제됩니다.`}>등록 해제</ConfirmSubmit>
               </form>
             </div>
           ))}
@@ -70,6 +78,39 @@ export default async function SettingsPage() {
         </CardContent>
       </Card>
 
+      {local && (
+        <Card>
+          <CardHeader>
+            <CardTitle>외부 접속 (Tailscale)</CardTitle>
+            <CardDescription>
+              아이폰·노트북은 Tailscale 로만 접속합니다. 허용 목록의 계정 + 앱 패스코드가 모두 맞아야 들어올 수 있습니다. 이 항목은 Mac mini 에서만 바꿀 수 있습니다.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4 text-sm">
+            <p>
+              이 Mac: {ts ? `${ts.login || "(로그인 정보 없음)"} · https://${ts.dnsName} ${ts.online ? "" : "(오프라인)"}` : "Tailscale 정보를 읽지 못했습니다."}
+            </p>
+            <pre className="overflow-x-auto rounded bg-muted p-2 text-xs">{serve || "serve 설정 없음"}</pre>
+            <form action={saveAllowlist} className="space-y-2">
+              <label className="block space-y-1">
+                <span className="font-medium">허용할 Tailscale 로그인 계정 (한 줄에 하나)</span>
+                <textarea
+                  name="logins"
+                  rows={2}
+                  defaultValue={(s.allowedTailscaleLogins.length ? s.allowedTailscaleLogins : ts?.login ? [ts.login] : []).join("\n")}
+                  className="w-full rounded-md border bg-background p-2 font-mono text-xs"
+                />
+              </label>
+              <Button type="submit" size="sm" variant="outline">
+                허용 목록 저장
+              </Button>
+              {!s.allowedTailscaleLogins.length && <span className="ml-2 text-destructive">아직 저장되지 않았습니다.</span>}
+            </form>
+            <PasscodeForm isSet={!!s.passcodeHash} />
+          </CardContent>
+        </Card>
+      )}
+
       <form action={saveSettings}>
         <Card>
           <CardHeader>
@@ -85,6 +126,10 @@ export default async function SettingsPage() {
               <label className="block space-y-1 text-sm">
                 <span className="font-medium">제외 이름 패턴 (한 줄에 하나, * 사용 가능)</span>
                 <textarea name="excludedPatterns" defaultValue={s.excludedPatterns.join("\n")} rows={6} className="w-full rounded-md border bg-background p-2 font-mono text-xs" />
+              </label>
+              <label className="block space-y-1 text-sm">
+                <span className="font-medium">폴더 이름 동의어 (프로젝트 연결 제안용, 예: 리뉴얼 = renewal)</span>
+                <textarea name="synonyms" defaultValue={s.synonyms.join("\n")} rows={4} className="w-full rounded-md border bg-background p-2 font-mono text-xs" />
               </label>
               <label className="block space-y-1 text-sm">
                 <span className="font-medium">편집기로 열기 (확장자 = 앱 이름)</span>

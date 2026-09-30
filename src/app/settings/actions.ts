@@ -136,6 +136,7 @@ export async function saveSettings(form: FormData) {
     if (m) editors[m[1].toLowerCase()] = m[2].trim();
   }
   setSetting(db, "editorByExt", editors);
+  setSetting(db, "synonyms", lines(form.get("synonyms")).filter((l) => l.includes("=")));
   enqueue(db, "settings_changed");
   refresh();
 }

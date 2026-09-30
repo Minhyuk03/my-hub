@@ -33,7 +33,7 @@ function Ok({ ok, yes = "정상", no = "문제" }: { ok: boolean; yes?: string; 
 
 export default async function Phase0Page() {
   await connection();
-  const env = runEnvCheck();
+  const env = await runEnvCheck();
   const bench = loadBench();
   const labels = bench ? [...new Set(bench.results.map((r) => r.label))] : [];
 

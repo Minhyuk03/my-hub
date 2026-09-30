@@ -19,7 +19,7 @@ export default async function StatusPage() {
   const srcs = sourcesWithStats(db);
   const errors = errorList(db);
   const worker = workerStatus(db);
-  const env = runEnvCheck();
+  const env = await runEnvCheck();
   const settings = getSettings(db);
   const diskBackups = listBackups(settings.backupDir);
   const pending = listBackups(PENDING_DIR);

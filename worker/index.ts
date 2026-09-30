@@ -14,6 +14,7 @@ import { openDb } from "@/server/db";
 import { backups, commands, runtime, scanJobs, sources } from "@/server/db/schema";
 import { getSettings } from "@/server/settings";
 import { checkAvailability } from "@/server/sources/availability";
+import { refreshSuggestions } from "@/server/projects/suggest";
 import { seedDefaultSources } from "@/server/sources/manage";
 import { isExcludedFolder, isExcludedName, isInside } from "@/server/sources/rules";
 import { processFile, realDeps, reindexItems, retryDue, runScan } from "@/server/sync/scanner";
@@ -51,6 +52,8 @@ async function runQueue() {
     log("스캔 시작", src.name, current.scope ?? "(전체)");
     const r = await runScan(db, src.id, deps, current.scope);
     log("스캔 종료", src.name, r.result, r.message ?? "", r.deleted ? `삭제 ${r.deleted}` : "");
+    // 폴더 구성이 바뀌었을 수 있으므로 프로젝트 연결 제안을 다시 계산한다
+    if (r.result === "ok" && !current.scope) updateSuggestions();
   }
   current = null;
 }
@@ -160,6 +163,9 @@ async function handleCommands() {
         case "reindex":
           await reindexItems(db, deps, c.payload.itemIds as number[]);
           break;
+        case "refresh_suggestions":
+          updateSuggestions();
+          break;
         case "backup":
           result = doBackup();
           break;
@@ -180,6 +186,15 @@ async function handleCommands() {
   }
   // 오래된 명령 기록 정리
   db.delete(commands).where(sql`${commands.doneAt} < ${Date.now() - 7 * 86400_000}`).run();
+}
+
+function updateSuggestions() {
+  try {
+    const n = refreshSuggestions(db);
+    if (n) log("프로젝트 연결 제안", `${n}건`);
+  } catch (e) {
+    log("제안 계산 실패", (e as Error).message);
+  }
 }
 
 function doBackup(): string {

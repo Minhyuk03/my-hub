@@ -20,6 +20,7 @@ export function parseFilters(sp: Params): SearchFilters {
     kinds: kinds.length ? kinds : undefined,
     modifiedAfter: range && DATE_RANGES[range] ? Date.now() - DATE_RANGES[range].ms : undefined,
     tag: sp.get("tag") || undefined,
+    projectId: Number(sp.get("project")) || undefined,
   };
 }
 

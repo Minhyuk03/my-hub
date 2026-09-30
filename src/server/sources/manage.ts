@@ -53,6 +53,9 @@ export function removeSource(db: Db, sourceId: number) {
     tx.run(sql`DELETE FROM item_tags WHERE item_id IN (SELECT id FROM items WHERE source_id = ${sourceId})`);
     tx.run(sql`DELETE FROM item_links WHERE item_id IN (SELECT id FROM items WHERE source_id = ${sourceId})`);
     tx.run(sql`DELETE FROM item_errors WHERE item_id IN (SELECT id FROM items WHERE source_id = ${sourceId})`);
+    tx.run(sql`DELETE FROM project_items WHERE item_id IN (SELECT id FROM items WHERE source_id = ${sourceId})`);
+    // 이 소스의 폴더에 걸린 프로젝트 연결도 지운다 (등록 해제 확인 창에서 안내)
+    tx.run(sql`DELETE FROM project_folders WHERE folder_id IN (SELECT id FROM folders WHERE source_id = ${sourceId})`);
     tx.delete(items).where(eq(items.sourceId, sourceId)).run();
     tx.delete(sources).where(eq(sources.id, sourceId)).run();
   });

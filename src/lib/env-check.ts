@@ -19,18 +19,27 @@ export type VolumeCheck = {
   freeBytes?: number;
 };
 
-function checkPath(label: string, p: string): PathCheck {
+/**
+ * 폴더를 읽을 수 있는지 확인한다. macOS 개인정보 보호 권한을 기다리는 동안 읽기가 멈출 수 있으므로
+ * 비동기로 읽고 3초가 지나면 "권한 대기"로 본다. (동기 읽기는 웹 서버 전체를 멈춘다)
+ */
+async function checkPath(label: string, p: string): Promise<PathCheck> {
   const exists = fs.existsSync(p);
-  let readable = false;
-  if (exists) {
-    try {
-      fs.readdirSync(p);
-      readable = true;
-    } catch {
-      readable = false;
-    }
-  }
-  return { label, path: p, exists, readable };
+  if (!exists) return { label, path: p, exists, readable: false };
+  const r = await Promise.race([
+    fs.promises.readdir(p).then(
+      () => "ok" as const,
+      () => "denied" as const,
+    ),
+    new Promise<"timeout">((res) => setTimeout(() => res("timeout"), 3000)),
+  ]);
+  return {
+    label,
+    path: p,
+    exists,
+    readable: r === "ok",
+    note: r === "timeout" ? "권한 대기 중 — 전체 디스크 접근 권한을 확인하세요" : r === "denied" ? "읽기 권한 없음" : undefined,
+  };
 }
 
 /**
@@ -67,15 +76,15 @@ function checkVolume(p: string): VolumeCheck {
   };
 }
 
-export function runEnvCheck() {
-  const paths: PathCheck[] = [
+export async function runEnvCheck() {
+  const paths: PathCheck[] = await Promise.all([
     checkPath("Obsidian 볼트", PATHS.obsidianVault),
     checkPath("iCloud Drive", PATHS.icloudDrive),
     checkPath("Claude Code 세션", PATHS.claudeProjects),
     ...PATHS.externalVolumes.map((v) => checkPath(`외장 디스크 ${path.basename(v)}`, v)),
-  ];
+  ]);
   const vault = paths[0];
-  if (vault.exists && !fs.existsSync(path.join(PATHS.obsidianVault, ".obsidian"))) {
+  if (vault.readable && !fs.existsSync(path.join(PATHS.obsidianVault, ".obsidian"))) {
     vault.note = ".obsidian 폴더가 없음 — 볼트 루트가 아닐 수 있음";
   }
   return {

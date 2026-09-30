@@ -7,6 +7,7 @@ import { KIND_LABEL } from "@/lib/labels";
 import { getDb } from "@/server/db";
 import { sources } from "@/server/db/schema";
 import { allTags } from "@/server/queries";
+import { projects } from "@/server/db/schema";
 import { DATE_RANGES, fromRecord, parseFilters } from "@/server/search/params";
 import { search } from "@/server/search/query";
 
@@ -23,6 +24,7 @@ export default async function SearchPage({ searchParams }: PageProps<"/search">)
   const r = q.trim() ? search(db, q, filters, PAGE, (page - 1) * PAGE) : null;
   const srcs = db.select().from(sources).all();
   const tags = allTags(db, 50);
+  const projectRows = db.select().from(projects).all();
   const selSources = p.getAll("source");
   const selKinds = p.getAll("kind");
 
@@ -66,6 +68,19 @@ export default async function SearchPage({ searchParams }: PageProps<"/search">)
             ))}
           </select>
         </fieldset>
+        {projectRows.length > 0 && (
+          <fieldset className="space-y-1">
+            <legend className="mb-1 font-medium">프로젝트</legend>
+            <select name="project" defaultValue={p.get("project") ?? ""} className="w-full rounded-md border bg-background px-2 py-1">
+              <option value="">전체</option>
+              {projectRows.map((pr) => (
+                <option key={pr.id} value={pr.id}>
+                  {pr.name}
+                </option>
+              ))}
+            </select>
+          </fieldset>
+        )}
         {tags.length > 0 && (
           <fieldset className="space-y-1">
             <legend className="mb-1 font-medium">태그</legend>

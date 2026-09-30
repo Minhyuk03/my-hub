@@ -5,6 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { relTime, shortPath } from "@/lib/format";
 import { getDb } from "@/server/db";
 import { activeFolders, recentItems, sourcesWithStats, workerStatus } from "@/server/queries";
+import { activeProjects } from "@/server/projects";
 
 function startOfDay(d = new Date()) {
   return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
@@ -22,7 +23,8 @@ export default async function Home() {
     { label: "이번 주", items: recent.filter((i) => (i.modifiedAt ?? 0) < today && (i.modifiedAt ?? 0) >= weekAgo) },
     { label: "이번 달", items: recent.filter((i) => (i.modifiedAt ?? 0) < weekAgo) },
   ];
-  const folders = activeFolders(db, today - 13 * 86400_000);
+  const projectsActive = activeProjects(db);
+  const folders = projectsActive.length ? [] : activeFolders(db, today - 13 * 86400_000);
   const srcs = sourcesWithStats(db);
   const worker = workerStatus(db);
 
@@ -81,10 +83,21 @@ export default async function Home() {
       <Card>
         <CardHeader>
           <CardTitle>이어서 작업하기</CardTitle>
-          <CardDescription>최근 2주 동안 수정이 많은 폴더</CardDescription>
+          <CardDescription>{projectsActive.length ? "최근 2주 동안 활동이 많은 프로젝트" : "최근 2주 동안 수정이 많은 폴더 (프로젝트를 만들면 프로젝트로 표시)"}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-2">
-          {!folders.length && <p className="text-sm text-muted-foreground">최근 활동이 없습니다.</p>}
+          {projectsActive.map((p) => (
+            <Link key={p.id} href={`/projects/${p.id}`} className="block text-sm hover:underline">
+              <div className="flex gap-2">
+                <span className="truncate font-medium">{p.name}</span>
+                <span className="ml-auto shrink-0 text-xs text-muted-foreground">
+                  {p.recentCount}개 수정 · {relTime(p.lastModified)}
+                </span>
+              </div>
+              {p.memo && <div className="truncate text-xs text-muted-foreground">{p.memo}</div>}
+            </Link>
+          ))}
+          {!projectsActive.length && !folders.length && <p className="text-sm text-muted-foreground">최근 활동이 없습니다.</p>}
           {folders.map((f) => (
             <Link key={f.folderId} href={`/search?q=${encodeURIComponent(f.name)}`} className="block text-sm hover:underline">
               <div className="flex gap-2">

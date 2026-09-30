@@ -17,6 +17,8 @@ import { isLocalRequest } from "@/server/http/local";
 import { extractText, isExtractable } from "@/server/extract";
 import { resolveItemFile } from "@/server/items/access";
 import { getItem } from "@/server/queries";
+import { projectList, projectsForItem } from "@/server/projects";
+import { ItemProjects } from "./item-projects";
 import { enqueue } from "@/server/sources/manage";
 import { getSettings } from "@/server/settings";
 import { LocalOpenButtons } from "./open-buttons";
@@ -44,6 +46,8 @@ export default async function ItemPage({ params, searchParams }: PageProps<"/ite
   const available = item.state !== "deleted" && source.status !== "offline";
   const obsidian = obsidianUrl(item.path);
   const hasEditor = !!getSettings(db).editorByExt[item.ext];
+  const memberOf = projectsForItem(db, item.id);
+  const allProjects = projectList(db).map((p) => ({ id: p.id, name: p.name }));
 
   // iCloud에만 있는 텍스트 파일: 사용자가 요청하면 직접 읽어서(=내려받아) 보여준다. 색인은 변경 감지가 이어서 한다.
   if (load && available && item.state === "cloud_only" && isExtractable(item.ext)) {
@@ -147,6 +151,8 @@ export default async function ItemPage({ params, searchParams }: PageProps<"/ite
         {/* 서버에서 프로그램을 실행하는 버튼은 Mac mini 본인 접속에서만 보인다 */}
         {available && local && <LocalOpenButtons id={item.id} hasEditor={hasEditor} />}
       </div>
+
+      <ItemProjects itemId={item.id} memberOf={memberOf} projects={allProjects} />
 
       <div>{preview}</div>
     </div>

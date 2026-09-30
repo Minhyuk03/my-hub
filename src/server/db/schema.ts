@@ -177,3 +177,60 @@ export const runtime = sqliteTable("runtime", {
   value: text("value", { mode: "json" }).notNull(),
   updatedAt: integer("updated_at").notNull(),
 });
+
+// ---------- Phase 2: 프로젝트 ----------
+
+export type ProjectStatus = "active" | "on_hold" | "done";
+export type AddedBy = "user" | "import" | "suggestion";
+
+export const projects = sqliteTable("projects", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  name: text("name").notNull(),
+  status: text("status").$type<ProjectStatus>().notNull().default("active"),
+  memo: text("memo").notNull().default(""),
+  /** 외부 AI 전송 정책 (Phase 5에서 사용) */
+  externalPolicy: text("external_policy").$type<"allow" | "deny">().notNull().default("allow"),
+  createdAt: integer("created_at").notNull(),
+  updatedAt: integer("updated_at").notNull(),
+});
+
+/** 폴더 단위 연결 (기본 방식). folder_id 는 inode로 추적되므로 이동·이름 변경에도 유지된다. */
+export const projectFolders = sqliteTable(
+  "project_folders",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    projectId: integer("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
+    folderId: integer("folder_id").notNull().references(() => folders.id),
+    includeSubfolders: integer("include_subfolders", { mode: "boolean" }).notNull().default(true),
+    addedBy: text("added_by").$type<AddedBy>().notNull().default("user"),
+    createdAt: integer("created_at").notNull(),
+  },
+  (t) => [uniqueIndex("project_folders_uniq").on(t.projectId, t.folderId), index("project_folders_folder").on(t.folderId)],
+);
+
+/** 폴더 밖 개별 항목 추가(include) / 연결된 폴더 안의 항목 제외(exclude) */
+export const projectItems = sqliteTable(
+  "project_items",
+  {
+    projectId: integer("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
+    itemId: integer("item_id").notNull(),
+    mode: text("mode").$type<"include" | "exclude">().notNull(),
+    addedBy: text("added_by").$type<AddedBy>().notNull().default("user"),
+    createdAt: integer("created_at").notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.projectId, t.itemId] }), index("project_items_item").on(t.itemId)],
+);
+
+/** 폴더 이름 기반 연결 제안. key(정렬된 폴더 ID 목록)가 같으면 같은 제안으로 보고, 거절한 제안은 다시 띄우지 않는다. */
+export const projectSuggestions = sqliteTable("project_suggestions", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  key: text("key").notNull().unique(),
+  projectId: integer("project_id"),
+  folderIds: text("folder_ids", { mode: "json" }).$type<number[]>().notNull(),
+  suggestedName: text("suggested_name").notNull(),
+  reason: text("reason").notNull(),
+  score: integer("score").notNull(),
+  status: text("status").$type<"pending" | "accepted" | "rejected">().notNull().default("pending"),
+  createdAt: integer("created_at").notNull(),
+  decidedAt: integer("decided_at"),
+});

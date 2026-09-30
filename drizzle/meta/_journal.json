@@ -22,6 +22,13 @@
       "when": 1790782859571,
       "tag": "0002_mtime_index",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1790783624287,
+      "tag": "0003_projects",
+      "breakpoints": true
     }
   ]
 }
