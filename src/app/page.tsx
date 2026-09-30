@@ -8,10 +8,23 @@ import { relTime, shortPath } from "@/lib/format";
 import { getDb } from "@/server/db";
 import { bookmarkBar, tiles } from "@/server/home";
 import { activeProjects } from "@/server/projects";
-import { activeFolders, recentItems, sourcesWithStats, workerStatus } from "@/server/queries";
+import {
+  activeFolders,
+  recentItems,
+  sourcesWithStats,
+  workerStatus,
+} from "@/server/queries";
 import { getSettings } from "@/server/settings";
 
-function Panel({ title, action, children }: { title: string; action?: React.ReactNode; children: React.ReactNode }) {
+function Panel({
+  title,
+  action,
+  children,
+}: {
+  title: string;
+  action?: React.ReactNode;
+  children: React.ReactNode;
+}) {
   return (
     <section className="rounded-xl border bg-background/80 p-4 shadow-sm backdrop-blur">
       <div className="mb-2 flex items-center">
@@ -28,7 +41,11 @@ function sinceTimes(now = Date.now()) {
 }
 
 function greeting(d = new Date()) {
-  return d.toLocaleDateString("ko-KR", { month: "long", day: "numeric", weekday: "long" });
+  return d.toLocaleDateString("ko-KR", {
+    month: "long",
+    day: "numeric",
+    weekday: "long",
+  });
 }
 
 export default async function Home() {
@@ -51,7 +68,11 @@ export default async function Home() {
         {s.homeBackground ? (
           <>
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={`/api/home/background?v=${encodeURIComponent(s.homeBackground)}`} alt="" className="h-full w-full object-cover" />
+            <img
+              src={`/api/home/background?v=${encodeURIComponent(s.homeBackground)}`}
+              alt=""
+              className="h-full w-full object-cover"
+            />
             <div className="absolute inset-0 bg-background/30" />
           </>
         ) : (
@@ -59,113 +80,198 @@ export default async function Home() {
         )}
       </div>
 
-      {/* 상단 북마크 바 (화면 전체 폭) */}
-      <div className="relative left-1/2 -mt-6 w-screen -translate-x-1/2">
+      {/* 홈은 화면 전체 폭을 쓴다: 위 북마크 바, 가운데 검색·타일, 오른쪽 끝에 붙은 사이드 패널 */}
+      <div className="-my-6 mx-[calc(50%-50vw)] flex min-h-[calc(100dvh-61px)] flex-col">
         <BookmarkBar root={bar.root} groups={bar.groups} />
-      </div>
 
-      <div className="grid gap-8 pt-8 lg:grid-cols-[1fr_340px] lg:pt-14">
-        {/* 가운데: 검색 + 즐겨찾기 타일 */}
-        <section className="flex flex-col items-center gap-8">
-          <div className="text-center">
-            <h1 className="text-4xl font-semibold tracking-tight drop-shadow-sm sm:text-5xl">나의 허브</h1>
-            <p className="mt-2 text-sm text-muted-foreground">{greeting()}</p>
-          </div>
-          <HomeSearch />
-          <div className="grid w-full max-w-2xl grid-cols-4 gap-2 sm:grid-cols-5">
-            {tileList.map((t) => (
-              <a key={t.id} href={t.href} title={t.subtitle} className="group flex flex-col items-center gap-2 rounded-xl p-2 text-center hover:bg-foreground/10">
-                <span className={`relative flex size-12 items-center justify-center rounded-full shadow-sm ${t.kind === "url" ? "bg-white" : "bg-background/90"}`}>
-                  {t.kind === "url" ? (
-                    <SiteIcon url={t.href} title={t.title} size={24} />
-                  ) : t.kind === "project" ? (
-                    <FolderKanban className="size-6 text-muted-foreground" />
-                  ) : (
-                    <FolderOpen className="size-6 text-muted-foreground" />
-                  )}
-                  {t.kind === "folder" && t.sourceKind && (
-                    <span className="absolute -bottom-1 -right-1 rounded-full bg-background p-0.5">
-                      <SourceIcon kind={t.sourceKind} className="size-3" />
-                    </span>
-                  )}
-                </span>
-                <span className="line-clamp-2 w-full text-xs font-medium drop-shadow-sm">{t.title}</span>
-                {t.warning && <span className="text-[10px] text-destructive">{t.warning}</span>}
-              </a>
-            ))}
-            <Link href="/home/edit#tiles" className="flex flex-col items-center gap-2 rounded-xl p-2 text-center hover:bg-foreground/10">
-              <span className="flex size-12 items-center justify-center rounded-full bg-background/90 shadow-sm">
-                <Plus className="size-5 text-muted-foreground" />
-              </span>
-              <span className="text-xs font-medium">즐겨찾기 추가</span>
-            </Link>
-          </div>
-        </section>
-
-        {/* 사이드: 이어서 작업하기, 최근 수정, 소스 상태 */}
-        <aside className="space-y-4">
-          <Panel title="이어서 작업하기" action={<Link href="/projects" className="text-xs text-muted-foreground hover:underline">프로젝트</Link>}>
-            <div className="space-y-2">
-              {projectsActive.map((p) => (
-                <Link key={p.id} href={`/projects/${p.id}`} className="block text-sm hover:underline">
-                  <div className="flex gap-2">
-                    <span className="truncate font-medium">{p.name}</span>
-                    <span className="ml-auto shrink-0 text-xs text-muted-foreground">
-                      {p.recentCount}개 · {relTime(p.lastModified)}
-                    </span>
-                  </div>
-                </Link>
-              ))}
-              {folders.map((f) => (
-                <Link key={f.folderId} href={`/folders/${f.folderId}`} className="block text-sm hover:underline">
-                  <div className="flex gap-2">
-                    <span className="truncate font-medium">{f.name}</span>
-                    <span className="ml-auto shrink-0 text-xs text-muted-foreground">
-                      {f.count}개 · {relTime(f.last)}
-                    </span>
-                  </div>
-                </Link>
-              ))}
-              {!projectsActive.length && !folders.length && <p className="text-sm text-muted-foreground">최근 2주 동안 활동이 없습니다.</p>}
+        <div className="flex flex-1 flex-col lg:flex-row">
+          {/* 가운데: 검색 + 즐겨찾기 타일 */}
+          <section className="flex flex-1 flex-col items-center gap-8 px-4 py-8 lg:py-16">
+            <div className="text-center">
+              <h1 className="text-4xl font-semibold tracking-tight drop-shadow-sm sm:text-5xl">
+                나의 허브
+              </h1>
+              <p className="mt-2 text-sm text-muted-foreground">{greeting()}</p>
             </div>
-          </Panel>
-
-          <Panel title="최근 수정" action={<Link href="/recent" className="text-xs text-muted-foreground hover:underline">전체 보기</Link>}>
-            <ul className="space-y-1">
-              {recent.map((i) => (
-                <li key={i.id}>
-                  <Link href={`/items/${i.id}`} className="flex items-center gap-2 rounded px-1 py-0.5 text-sm hover:bg-muted" title={shortPath(i.path)}>
-                    <SourceIcon kind={i.sourceKind} className="size-3.5" />
-                    <span className="truncate">{i.title}</span>
-                    <StateBadge state={i.state} sourceStatus={i.sourceStatus} />
-                    <span className="ml-auto shrink-0 text-xs text-muted-foreground">{relTime(i.modifiedAt)}</span>
-                  </Link>
-                </li>
-              ))}
-              {!recent.length && <li className="text-sm text-muted-foreground">최근 30일 안에 수정된 항목이 없습니다.</li>}
-            </ul>
-          </Panel>
-
-          <Panel title="소스 상태" action={<span className={worker.alive ? "text-xs text-muted-foreground" : "text-xs text-destructive"}>인덱서 {worker.alive ? "실행 중" : "멈춤"}</span>}>
-            <div className="space-y-1.5">
-              {srcs.map((src) => (
-                <Link key={src.id} href="/status" className="flex items-center gap-2 text-sm hover:underline">
-                  <SourceIcon kind={src.kind} />
-                  <span className="truncate">{src.name}</span>
-                  <span className="ml-auto flex shrink-0 items-center gap-2">
-                    <span className="text-xs text-muted-foreground">{src.total.toLocaleString()}</span>
-                    <SourceStatusBadge status={src.status} />
+            <HomeSearch />
+            <div className="grid w-full max-w-2xl grid-cols-4 gap-2 sm:grid-cols-5">
+              {tileList.map((t) => (
+                <a
+                  key={t.id}
+                  href={t.href}
+                  title={t.subtitle}
+                  className="group flex flex-col items-center gap-2 rounded-xl p-2 text-center hover:bg-foreground/10"
+                >
+                  <span
+                    className={`relative flex size-12 items-center justify-center rounded-full shadow-sm ${t.kind === "url" ? "bg-white" : "bg-background/90"}`}
+                  >
+                    {t.kind === "url" ? (
+                      <SiteIcon url={t.href} title={t.title} size={24} />
+                    ) : t.kind === "project" ? (
+                      <FolderKanban className="size-6 text-muted-foreground" />
+                    ) : (
+                      <FolderOpen className="size-6 text-muted-foreground" />
+                    )}
+                    {t.kind === "folder" && t.sourceKind && (
+                      <span className="absolute -bottom-1 -right-1 rounded-full bg-background p-0.5">
+                        <SourceIcon kind={t.sourceKind} className="size-3" />
+                      </span>
+                    )}
                   </span>
-                </Link>
+                  <span className="line-clamp-2 w-full text-xs font-medium drop-shadow-sm">
+                    {t.title}
+                  </span>
+                  {t.warning && (
+                    <span className="text-[10px] text-destructive">
+                      {t.warning}
+                    </span>
+                  )}
+                </a>
               ))}
-              {!srcs.length && (
-                <p className="text-sm text-muted-foreground">
-                  연결된 소스가 없습니다. <Link href="/settings" className="underline">설정</Link>
-                </p>
-              )}
+              <Link
+                href="/home/edit#tiles"
+                className="flex flex-col items-center gap-2 rounded-xl p-2 text-center hover:bg-foreground/10"
+              >
+                <span className="flex size-12 items-center justify-center rounded-full bg-background/90 shadow-sm">
+                  <Plus className="size-5 text-muted-foreground" />
+                </span>
+                <span className="text-xs font-medium">즐겨찾기 추가</span>
+              </Link>
             </div>
-          </Panel>
-        </aside>
+          </section>
+
+          {/* 사이드: 이어서 작업하기, 최근 수정, 소스 상태 */}
+          <aside className="space-y-4 border-t border-foreground/10 bg-background/60 p-4 backdrop-blur lg:w-[360px] lg:shrink-0 lg:border-l lg:border-t-0 xl:w-[400px]">
+            <Panel
+              title="이어서 작업하기"
+              action={
+                <Link
+                  href="/projects"
+                  className="text-xs text-muted-foreground hover:underline"
+                >
+                  프로젝트
+                </Link>
+              }
+            >
+              <div className="space-y-2">
+                {projectsActive.map((p) => (
+                  <Link
+                    key={p.id}
+                    href={`/projects/${p.id}`}
+                    className="block text-sm hover:underline"
+                  >
+                    <div className="flex gap-2">
+                      <span className="truncate font-medium">{p.name}</span>
+                      <span className="ml-auto shrink-0 text-xs text-muted-foreground">
+                        {p.recentCount}개 · {relTime(p.lastModified)}
+                      </span>
+                    </div>
+                  </Link>
+                ))}
+                {folders.map((f) => (
+                  <Link
+                    key={f.folderId}
+                    href={`/folders/${f.folderId}`}
+                    className="block text-sm hover:underline"
+                  >
+                    <div className="flex gap-2">
+                      <span className="truncate font-medium">{f.name}</span>
+                      <span className="ml-auto shrink-0 text-xs text-muted-foreground">
+                        {f.count}개 · {relTime(f.last)}
+                      </span>
+                    </div>
+                  </Link>
+                ))}
+                {!projectsActive.length && !folders.length && (
+                  <p className="text-sm text-muted-foreground">
+                    최근 2주 동안 활동이 없습니다.
+                  </p>
+                )}
+              </div>
+            </Panel>
+
+            <Panel
+              title="최근 수정"
+              action={
+                <Link
+                  href="/recent"
+                  className="text-xs text-muted-foreground hover:underline"
+                >
+                  전체 보기
+                </Link>
+              }
+            >
+              <ul className="space-y-1">
+                {recent.map((i) => (
+                  <li key={i.id}>
+                    <Link
+                      href={`/items/${i.id}`}
+                      className="flex items-center gap-2 rounded px-1 py-0.5 text-sm hover:bg-muted"
+                      title={shortPath(i.path)}
+                    >
+                      <SourceIcon kind={i.sourceKind} className="size-3.5" />
+                      <span className="truncate">{i.title}</span>
+                      <StateBadge
+                        state={i.state}
+                        sourceStatus={i.sourceStatus}
+                      />
+                      <span className="ml-auto shrink-0 text-xs text-muted-foreground">
+                        {relTime(i.modifiedAt)}
+                      </span>
+                    </Link>
+                  </li>
+                ))}
+                {!recent.length && (
+                  <li className="text-sm text-muted-foreground">
+                    최근 30일 안에 수정된 항목이 없습니다.
+                  </li>
+                )}
+              </ul>
+            </Panel>
+
+            <Panel
+              title="소스 상태"
+              action={
+                <span
+                  className={
+                    worker.alive
+                      ? "text-xs text-muted-foreground"
+                      : "text-xs text-destructive"
+                  }
+                >
+                  인덱서 {worker.alive ? "실행 중" : "멈춤"}
+                </span>
+              }
+            >
+              <div className="space-y-1.5">
+                {srcs.map((src) => (
+                  <Link
+                    key={src.id}
+                    href="/status"
+                    className="flex items-center gap-2 text-sm hover:underline"
+                  >
+                    <SourceIcon kind={src.kind} />
+                    <span className="truncate">{src.name}</span>
+                    <span className="ml-auto flex shrink-0 items-center gap-2">
+                      <span className="text-xs text-muted-foreground">
+                        {src.total.toLocaleString()}
+                      </span>
+                      <SourceStatusBadge status={src.status} />
+                    </span>
+                  </Link>
+                ))}
+                {!srcs.length && (
+                  <p className="text-sm text-muted-foreground">
+                    연결된 소스가 없습니다.{" "}
+                    <Link href="/settings" className="underline">
+                      설정
+                    </Link>
+                  </p>
+                )}
+              </div>
+            </Panel>
+          </aside>
+        </div>
       </div>
     </>
   );
