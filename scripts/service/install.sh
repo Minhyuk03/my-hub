@@ -14,6 +14,7 @@ if [ ! -x "$NODE" ]; then
 fi
 mkdir -p "$LOGS" "$AGENTS"
 
+[ -x "$HOME/Library/Application Support/my-hub/runtime/hub-materialize" ] || bash "$ROOT/scripts/service/build-native.sh"
 echo "1/3 운영용 빌드"
 (cd "$ROOT" && "$NODE" node_modules/next/dist/bin/next build > "$LOGS/build.log" 2>&1) || { echo "빌드 실패: $LOGS/build.log 확인" >&2; exit 1; }
 echo "2/3 DB 준비"

@@ -17,6 +17,8 @@ npm run service:uninstall  # 등록 해제 (데이터·백업은 그대로)
 
 - 로그: `~/Library/Logs/my-hub/web.log`, `worker.log`
 - 실행 파일: 허브 전용 Node (`~/Library/Application Support/my-hub/runtime/current/bin/node`, nodejs.org 공식 서명본). 이 파일에 **전체 디스크 접근 권한**이 있어야 iCloud·문서·외장 디스크를 읽습니다. Homebrew node 와 무관합니다.
+- **iCloud 에만 있는 파일**: launchd 로 실행된 프로세스는 iCloud 파일을 읽기만으로 내려받을 수 없습니다(오류 -11). 그래서 워커는 이런 파일을 읽지 않고 제목·정보만 저장하고, 사용자가 열거나 다운로드할 때 웹 서버가 도우미 `hub-materialize`(`native/materialize.c`, `npm run build:native`)로 내려받은 뒤 보냅니다. 오래 걸리면 "받아오는 중" 화면이 자동으로 다시 시도합니다.
+- 변경 감지는 macOS FSEvents 재귀 감시(소스당 핸들 1개)를 씁니다.
 - FileVault 가 켜져 있어 재부팅 후에는 한 번 로그인해야 허브가 시작됩니다. 계획된 재시동은 `sudo fdesetup authrestart` 를 쓰면 한 번 자동으로 잠금이 풀립니다.
 - 개발할 때는 서비스를 멈추고(`npm run service:uninstall`) `npm run hub` 로 실행합니다. 포트가 겹칩니다.
 
