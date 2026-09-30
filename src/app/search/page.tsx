@@ -1,0 +1,125 @@
+import Link from "next/link";
+import { connection } from "next/server";
+import { Highlighted, ItemRow } from "@/components/hub-ui";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { KIND_LABEL } from "@/lib/labels";
+import { getDb } from "@/server/db";
+import { sources } from "@/server/db/schema";
+import { allTags } from "@/server/queries";
+import { DATE_RANGES, fromRecord, parseFilters } from "@/server/search/params";
+import { search } from "@/server/search/query";
+
+const PAGE = 30;
+
+export default async function SearchPage({ searchParams }: PageProps<"/search">) {
+  await connection();
+  const sp = await searchParams;
+  const p = fromRecord(sp);
+  const q = p.get("q") ?? "";
+  const page = Math.max(1, Number(p.get("page") ?? 1));
+  const db = getDb();
+  const filters = parseFilters(p);
+  const r = q.trim() ? search(db, q, filters, PAGE, (page - 1) * PAGE) : null;
+  const srcs = db.select().from(sources).all();
+  const tags = allTags(db, 50);
+  const selSources = p.getAll("source");
+  const selKinds = p.getAll("kind");
+
+  const pageHref = (n: number) => {
+    const u = new URLSearchParams();
+    for (const [k, v] of Object.entries(sp)) for (const x of Array.isArray(v) ? v : v ? [v] : []) if (k !== "page") u.append(k, x);
+    u.set("page", String(n));
+    return `/search?${u}`;
+  };
+
+  return (
+    <div className="grid gap-6 md:grid-cols-[220px_1fr]">
+      <form className="space-y-4 text-sm" action="/search">
+        <Input name="q" defaultValue={q} placeholder="검색어" className="md:hidden" />
+        <fieldset className="space-y-1">
+          <legend className="mb-1 font-medium">소스</legend>
+          {srcs.map((s) => (
+            <label key={s.id} className="flex items-center gap-2">
+              <input type="checkbox" name="source" value={s.id} defaultChecked={selSources.includes(String(s.id))} />
+              <span className="truncate">{s.name}</span>
+            </label>
+          ))}
+        </fieldset>
+        <fieldset className="space-y-1">
+          <legend className="mb-1 font-medium">형식</legend>
+          {Object.entries(KIND_LABEL).map(([k, label]) => (
+            <label key={k} className="flex items-center gap-2">
+              <input type="checkbox" name="kind" value={k} defaultChecked={selKinds.includes(k)} />
+              {label}
+            </label>
+          ))}
+        </fieldset>
+        <fieldset className="space-y-1">
+          <legend className="mb-1 font-medium">수정 날짜</legend>
+          <select name="date" defaultValue={p.get("date") ?? ""} className="w-full rounded-md border bg-background px-2 py-1">
+            <option value="">전체</option>
+            {Object.entries(DATE_RANGES).map(([k, v]) => (
+              <option key={k} value={k}>
+                최근 {v.label}
+              </option>
+            ))}
+          </select>
+        </fieldset>
+        {tags.length > 0 && (
+          <fieldset className="space-y-1">
+            <legend className="mb-1 font-medium">태그</legend>
+            <select name="tag" defaultValue={p.get("tag") ?? ""} className="w-full rounded-md border bg-background px-2 py-1">
+              <option value="">전체</option>
+              {tags.map((t) => (
+                <option key={t.name} value={t.name}>
+                  #{t.name} ({t.n})
+                </option>
+              ))}
+            </select>
+          </fieldset>
+        )}
+        <Button type="submit" size="sm" className="w-full">
+          필터 적용
+        </Button>
+      </form>
+
+      <div>
+        <form action="/search" className="mb-4 hidden md:block">
+          <Input name="q" defaultValue={q} placeholder="검색어를 입력하세요" />
+        </form>
+        {!r && <p className="text-sm text-muted-foreground">검색어를 입력하세요. 어디서든 ⌘K 로 검색창을 열 수 있습니다.</p>}
+        {r && (
+          <>
+            <p className="mb-2 text-xs text-muted-foreground">
+              {r.total.toLocaleString()}{r.capped ? "+" : ""}건 · {r.tookMs.toFixed(0)}ms{r.capped && " (결과가 많아 일부만 정렬했습니다. 검색어나 필터를 더 구체적으로 입력하세요)"}
+            </p>
+            <div className="divide-y">
+              {r.hits.map((h) => (
+                <ItemRow key={h.id} item={h}>
+                  {h.snippet && (
+                    <p className="line-clamp-2 pl-6 text-sm">
+                      <Highlighted text={h.snippet} ranges={h.highlights} />
+                    </p>
+                  )}
+                </ItemRow>
+              ))}
+            </div>
+            <div className="mt-4 flex gap-2">
+              {page > 1 && (
+                <Link href={pageHref(page - 1)} className="text-sm underline">
+                  ← 이전
+                </Link>
+              )}
+              {page * PAGE < r.total && (
+                <Link href={pageHref(page + 1)} className="text-sm underline">
+                  다음 →
+                </Link>
+              )}
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}

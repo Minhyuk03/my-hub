@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Search } from "lucide-react";
+import { SearchPalette } from "./search-palette";
 import { ThemeToggle } from "./theme-toggle";
 
 const NAV = [
@@ -23,11 +23,7 @@ export function AppHeader() {
             </Link>
           ))}
         </nav>
-        <div className="order-last flex w-full items-center gap-2 rounded-md border px-3 py-1.5 text-sm text-muted-foreground sm:order-none sm:ml-auto sm:w-72">
-          <Search className="size-4" />
-          <span className="flex-1">검색 (Phase 1에서 사용 가능)</span>
-          <kbd className="rounded border px-1 text-xs">⌘K</kbd>
-        </div>
+        <SearchPalette />
         <ThemeToggle />
       </div>
     </header>
