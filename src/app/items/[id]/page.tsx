@@ -18,6 +18,7 @@ import { extractText, isExtractable } from "@/server/extract";
 import { resolveItemFile } from "@/server/items/access";
 import { materialize } from "@/lib/fs/dataless";
 import { getItem } from "@/server/queries";
+import { mainTagOf, tagEmojiMap } from "@/server/graph";
 import { projectList, projectsForItem } from "@/server/projects";
 import { ItemProjects } from "./item-projects";
 import { enqueue } from "@/server/sources/manage";
@@ -49,6 +50,7 @@ export default async function ItemPage({ params, searchParams }: PageProps<"/ite
   const obsidian = obsidianUrl(item.path);
   const hasEditor = !!getSettings(db).editorByExt[item.ext];
   const memberOf = projectsForItem(db, item.id);
+  const tagEmoji = tagEmojiMap(db);
   const allProjects = projectList(db).map((p) => ({ id: p.id, name: p.name }));
 
   // iCloud에만 있는 텍스트 파일: 사용자가 요청하면 직접 읽어서(=내려받아) 보여준다. 색인은 변경 감지가 이어서 한다.
@@ -127,7 +129,7 @@ export default async function ItemPage({ params, searchParams }: PageProps<"/ite
           <div className="flex flex-wrap gap-1 pt-1">
             {tags.map((t) => (
               <a key={t} href={`/search?q=${encodeURIComponent(t)}&tag=${encodeURIComponent(t)}`}>
-                <Badge variant="secondary">#{t}</Badge>
+                <Badge variant="secondary">{tagEmoji.get(mainTagOf(t)) ? `${tagEmoji.get(mainTagOf(t))} ` : ""}#{t}</Badge>
               </a>
             ))}
           </div>

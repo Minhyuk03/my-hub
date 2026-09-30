@@ -7,6 +7,7 @@ import { KIND_LABEL } from "@/lib/labels";
 import { getDb } from "@/server/db";
 import { sources } from "@/server/db/schema";
 import { allTags } from "@/server/queries";
+import { tagEmojiMap, tagWithEmoji } from "@/server/graph";
 import { projects } from "@/server/db/schema";
 import { DATE_RANGES, fromRecord, parseFilters } from "@/server/search/params";
 import { search } from "@/server/search/query";
@@ -24,6 +25,7 @@ export default async function SearchPage({ searchParams }: PageProps<"/search">)
   const r = q.trim() ? search(db, q, filters, PAGE, (page - 1) * PAGE) : null;
   const srcs = db.select().from(sources).all();
   const tags = allTags(db, 50);
+  const tagEmoji = tagEmojiMap(db);
   const projectRows = db.select().from(projects).all();
   const selSources = p.getAll("source");
   const selKinds = p.getAll("kind");
@@ -88,7 +90,7 @@ export default async function SearchPage({ searchParams }: PageProps<"/search">)
               <option value="">전체</option>
               {tags.map((t) => (
                 <option key={t.name} value={t.name}>
-                  #{t.name} ({t.n})
+                  {tagWithEmoji(t.name, tagEmoji)} ({t.n})
                 </option>
               ))}
             </select>

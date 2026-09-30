@@ -266,3 +266,9 @@ export const shortcuts = sqliteTable("shortcuts", {
   title: text("title").notNull(),
   order: integer("order").notNull().default(0),
 });
+
+/** 메인 태그(최상위 태그)의 이모지 */
+export const tagStyles = sqliteTable("tag_styles", {
+  name: text("name").primaryKey(),
+  emoji: text("emoji").notNull(),
+});

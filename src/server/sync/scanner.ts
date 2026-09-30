@@ -3,7 +3,7 @@ import fs from "node:fs";
 import fsp from "node:fs/promises";
 import path from "node:path";
 import { and, eq, inArray, lt, ne, sql } from "drizzle-orm";
-import { isMaterializeRefused, isDataless as realIsDataless } from "@/lib/fs/dataless";
+import { isMaterializeRefused, materialize, isDataless as realIsDataless } from "@/lib/fs/dataless";
 import type { Db } from "../db";
 import { folders, itemErrors, itemLinks, items, itemTags, scanJobs, sources, tags } from "../db/schema";
 import { extractText, isExtractable, kindOf } from "../extract";
@@ -21,6 +21,8 @@ export type ScanDeps = {
   mount: MountEnv;
   isDataless: (p: string, st: fs.Stats) => boolean;
   readFile: (p: string) => Promise<Buffer>;
+  /** iCloud 에만 있는 파일을 내려받는다 (소스에서 "텍스트 파일 내려받기"를 켰을 때만 사용) */
+  materialize?: (p: string) => Promise<boolean>;
   /** true를 돌려주면 스캔을 멈추고 cursor를 저장한다 (종료·테스트용) */
   shouldAbort?: () => boolean;
   onProgress?: (jobId: number, processed: number) => void;
@@ -31,7 +33,11 @@ export const realDeps = (): ScanDeps => ({
   mount: realMountEnv,
   isDataless: realIsDataless,
   readFile: (p) => fsp.readFile(p),
+  materialize: (p) => materialize(p, 120_000),
 });
+
+/** "텍스트 파일 내려받기"로 받는 파일 크기 상한 */
+export const TEXT_DOWNLOAD_MAX = 2 * 1024 * 1024;
 
 /** 재시도 간격: 1분 → 5분 → 30분 → 6시간, 그 뒤로는 오류 목록에만 남긴다 */
 export const RETRY_DELAYS_MS = [60_000, 5 * 60_000, 30 * 60_000, 6 * 3600_000];
@@ -223,8 +229,20 @@ export async function processFile(
 ): Promise<Item> {
   const mtime = Math.round(st.mtimeMs);
   const ext = path.extname(p).slice(1).toLowerCase();
-  const dataless = deps.isDataless(p, st);
+  let dataless = deps.isDataless(p, st);
   let existing = db.select().from(items).where(eq(items.path, p)).get();
+
+  // 이미 본문을 색인한 파일을 macOS 가 iCloud 로 내려보낸 경우: 내용은 그대로이므로 색인을 유지한다
+  if (dataless && existing && existing.state === "ok" && existing.modifiedAt === mtime && existing.size === st.size) {
+    if (jobId) db.update(items).set({ seenScanId: jobId }).where(eq(items.id, existing.id)).run();
+    return existing;
+  }
+
+  // 소스에서 "텍스트 파일 내려받기"를 켰으면 작은 텍스트 파일은 iCloud 에서 받아 본문까지 색인한다
+  const cfg = (src.config ?? {}) as { downloadText?: boolean };
+  if (dataless && cfg.downloadText && deps.materialize && isExtractable(ext) && st.size <= TEXT_DOWNLOAD_MAX) {
+    if (await deps.materialize(p).catch(() => false)) dataless = false;
+  }
 
   // 변경 없음: 확인 표시만 한다
   if (
