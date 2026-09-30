@@ -23,6 +23,8 @@ export const DEFAULT_SETTINGS = {
   allowedTailscaleLogins: [] as string[],
   /** 앱 패스코드 (scrypt 해시). 비어 있으면 외부 접속 불가 */
   passcodeHash: "" as string,
+  /** 홈 배경 이미지 파일 이름 (앱 데이터 폴더 안). 비어 있으면 기본 배경 */
+  homeBackground: "" as string,
 };
 
 export type Settings = typeof DEFAULT_SETTINGS;

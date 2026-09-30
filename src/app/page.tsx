@@ -1,116 +1,172 @@
+import { FolderKanban, FolderOpen, Plus } from "lucide-react";
 import Link from "next/link";
 import { connection } from "next/server";
-import { ItemRow, SourceIcon, SourceStatusBadge } from "@/components/hub-ui";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { BookmarkBar, SiteIcon } from "@/components/home/bookmark-bar";
+import { HomeSearch } from "@/components/home/home-search";
+import { SourceIcon, SourceStatusBadge, StateBadge } from "@/components/hub-ui";
 import { relTime, shortPath } from "@/lib/format";
 import { getDb } from "@/server/db";
-import { activeFolders, recentItems, sourcesWithStats, workerStatus } from "@/server/queries";
+import { bookmarkBar, tiles } from "@/server/home";
 import { activeProjects } from "@/server/projects";
+import { activeFolders, recentItems, sourcesWithStats, workerStatus } from "@/server/queries";
+import { getSettings } from "@/server/settings";
 
-function startOfDay(d = new Date()) {
-  return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+function Panel({ title, action, children }: { title: string; action?: React.ReactNode; children: React.ReactNode }) {
+  return (
+    <section className="rounded-xl border bg-background/80 p-4 shadow-sm backdrop-blur">
+      <div className="mb-2 flex items-center">
+        <h2 className="text-sm font-semibold">{title}</h2>
+        <span className="ml-auto">{action}</span>
+      </div>
+      {children}
+    </section>
+  );
+}
+
+function sinceTimes(now = Date.now()) {
+  return { since14: now - 14 * 86400_000, since30: now - 30 * 86400_000 };
+}
+
+function greeting(d = new Date()) {
+  return d.toLocaleDateString("ko-KR", { month: "long", day: "numeric", weekday: "long" });
 }
 
 export default async function Home() {
   await connection();
   const db = getDb();
-  const today = startOfDay();
-  const weekAgo = today - 6 * 86400_000;
-  const monthAgo = today - 29 * 86400_000;
-  const recent = recentItems(db, monthAgo, 60);
-  const groups = [
-    { label: "오늘", items: recent.filter((i) => (i.modifiedAt ?? 0) >= today) },
-    { label: "이번 주", items: recent.filter((i) => (i.modifiedAt ?? 0) < today && (i.modifiedAt ?? 0) >= weekAgo) },
-    { label: "이번 달", items: recent.filter((i) => (i.modifiedAt ?? 0) < weekAgo) },
-  ];
+  const s = getSettings(db);
+  const bar = bookmarkBar(db);
+  const tileList = tiles(db);
+  const { since14, since30 } = sinceTimes();
+  const recent = recentItems(db, since30, 12);
   const projectsActive = activeProjects(db);
-  const folders = projectsActive.length ? [] : activeFolders(db, today - 13 * 86400_000);
+  const folders = projectsActive.length ? [] : activeFolders(db, since14, 5);
   const srcs = sourcesWithStats(db);
   const worker = workerStatus(db);
 
   return (
-    <div className="grid gap-4 md:grid-cols-3">
-      <Card className="md:col-span-2 md:row-span-2">
-        <CardHeader>
-          <CardTitle>최근 수정</CardTitle>
-          <CardDescription>전체 소스의 최근 30일</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {!recent.length && <p className="text-sm text-muted-foreground">최근 30일 안에 수정된 항목이 없습니다.</p>}
-          {groups.map(
-            (g) =>
-              g.items.length > 0 && (
-                <section key={g.label}>
-                  <h3 className="mb-1 text-sm font-medium text-muted-foreground">{g.label}</h3>
-                  <div className="divide-y">
-                    {g.items.slice(0, 20).map((i) => (
-                      <ItemRow key={i.id} item={i} />
-                    ))}
-                  </div>
-                </section>
-              ),
-          )}
-        </CardContent>
-      </Card>
+    <>
+      {/* 배경: 설정한 이미지 또는 기본 그라데이션 */}
+      <div className="pointer-events-none fixed inset-0 -z-10">
+        {s.homeBackground ? (
+          <>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={`/api/home/background?v=${encodeURIComponent(s.homeBackground)}`} alt="" className="h-full w-full object-cover" />
+            <div className="absolute inset-0 bg-background/30" />
+          </>
+        ) : (
+          <div className="h-full w-full bg-[radial-gradient(ellipse_at_top,var(--color-muted),transparent_60%)]" />
+        )}
+      </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>소스 상태</CardTitle>
-          <CardDescription>
-            인덱서 {worker.alive ? "실행 중" : "멈춤"}
-            {!worker.alive && " — npm run hub 로 시작하세요"}
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-2">
-          {!srcs.length && (
-            <p className="text-sm text-muted-foreground">
-              연결된 소스가 없습니다. <Link href="/settings" className="underline">설정</Link>에서 폴더를 추가하세요.
-            </p>
-          )}
-          {srcs.map((s) => (
-            <Link key={s.id} href="/status" className="flex items-center gap-2 text-sm hover:underline">
-              <SourceIcon kind={s.kind} />
-              <span className="truncate">{s.name}</span>
-              <span className="ml-auto flex shrink-0 items-center gap-2">
-                <span className="text-xs text-muted-foreground">{s.total.toLocaleString()}</span>
-                <SourceStatusBadge status={s.status} />
+      {/* 상단 북마크 바 (화면 전체 폭) */}
+      <div className="relative left-1/2 -mt-6 w-screen -translate-x-1/2">
+        <BookmarkBar root={bar.root} groups={bar.groups} />
+      </div>
+
+      <div className="grid gap-8 pt-8 lg:grid-cols-[1fr_340px] lg:pt-14">
+        {/* 가운데: 검색 + 즐겨찾기 타일 */}
+        <section className="flex flex-col items-center gap-8">
+          <div className="text-center">
+            <h1 className="text-4xl font-semibold tracking-tight drop-shadow-sm sm:text-5xl">나의 허브</h1>
+            <p className="mt-2 text-sm text-muted-foreground">{greeting()}</p>
+          </div>
+          <HomeSearch />
+          <div className="grid w-full max-w-2xl grid-cols-4 gap-2 sm:grid-cols-5">
+            {tileList.map((t) => (
+              <a key={t.id} href={t.href} title={t.subtitle} className="group flex flex-col items-center gap-2 rounded-xl p-2 text-center hover:bg-foreground/10">
+                <span className={`relative flex size-12 items-center justify-center rounded-full shadow-sm ${t.kind === "url" ? "bg-white" : "bg-background/90"}`}>
+                  {t.kind === "url" ? (
+                    <SiteIcon url={t.href} title={t.title} size={24} />
+                  ) : t.kind === "project" ? (
+                    <FolderKanban className="size-6 text-muted-foreground" />
+                  ) : (
+                    <FolderOpen className="size-6 text-muted-foreground" />
+                  )}
+                  {t.kind === "folder" && t.sourceKind && (
+                    <span className="absolute -bottom-1 -right-1 rounded-full bg-background p-0.5">
+                      <SourceIcon kind={t.sourceKind} className="size-3" />
+                    </span>
+                  )}
+                </span>
+                <span className="line-clamp-2 w-full text-xs font-medium drop-shadow-sm">{t.title}</span>
+                {t.warning && <span className="text-[10px] text-destructive">{t.warning}</span>}
+              </a>
+            ))}
+            <Link href="/home/edit#tiles" className="flex flex-col items-center gap-2 rounded-xl p-2 text-center hover:bg-foreground/10">
+              <span className="flex size-12 items-center justify-center rounded-full bg-background/90 shadow-sm">
+                <Plus className="size-5 text-muted-foreground" />
               </span>
+              <span className="text-xs font-medium">즐겨찾기 추가</span>
             </Link>
-          ))}
-        </CardContent>
-      </Card>
+          </div>
+        </section>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>이어서 작업하기</CardTitle>
-          <CardDescription>{projectsActive.length ? "최근 2주 동안 활동이 많은 프로젝트" : "최근 2주 동안 수정이 많은 폴더 (프로젝트를 만들면 프로젝트로 표시)"}</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-2">
-          {projectsActive.map((p) => (
-            <Link key={p.id} href={`/projects/${p.id}`} className="block text-sm hover:underline">
-              <div className="flex gap-2">
-                <span className="truncate font-medium">{p.name}</span>
-                <span className="ml-auto shrink-0 text-xs text-muted-foreground">
-                  {p.recentCount}개 수정 · {relTime(p.lastModified)}
-                </span>
-              </div>
-              {p.memo && <div className="truncate text-xs text-muted-foreground">{p.memo}</div>}
-            </Link>
-          ))}
-          {!projectsActive.length && !folders.length && <p className="text-sm text-muted-foreground">최근 활동이 없습니다.</p>}
-          {folders.map((f) => (
-            <Link key={f.folderId} href={`/search?q=${encodeURIComponent(f.name)}`} className="block text-sm hover:underline">
-              <div className="flex gap-2">
-                <span className="truncate font-medium">{f.name}</span>
-                <span className="ml-auto shrink-0 text-xs text-muted-foreground">
-                  {f.count}개 · {relTime(f.last)}
-                </span>
-              </div>
-              <div className="truncate text-xs text-muted-foreground">{shortPath(f.path)}</div>
-            </Link>
-          ))}
-        </CardContent>
-      </Card>
-    </div>
+        {/* 사이드: 이어서 작업하기, 최근 수정, 소스 상태 */}
+        <aside className="space-y-4">
+          <Panel title="이어서 작업하기" action={<Link href="/projects" className="text-xs text-muted-foreground hover:underline">프로젝트</Link>}>
+            <div className="space-y-2">
+              {projectsActive.map((p) => (
+                <Link key={p.id} href={`/projects/${p.id}`} className="block text-sm hover:underline">
+                  <div className="flex gap-2">
+                    <span className="truncate font-medium">{p.name}</span>
+                    <span className="ml-auto shrink-0 text-xs text-muted-foreground">
+                      {p.recentCount}개 · {relTime(p.lastModified)}
+                    </span>
+                  </div>
+                </Link>
+              ))}
+              {folders.map((f) => (
+                <Link key={f.folderId} href={`/folders/${f.folderId}`} className="block text-sm hover:underline">
+                  <div className="flex gap-2">
+                    <span className="truncate font-medium">{f.name}</span>
+                    <span className="ml-auto shrink-0 text-xs text-muted-foreground">
+                      {f.count}개 · {relTime(f.last)}
+                    </span>
+                  </div>
+                </Link>
+              ))}
+              {!projectsActive.length && !folders.length && <p className="text-sm text-muted-foreground">최근 2주 동안 활동이 없습니다.</p>}
+            </div>
+          </Panel>
+
+          <Panel title="최근 수정" action={<Link href="/recent" className="text-xs text-muted-foreground hover:underline">전체 보기</Link>}>
+            <ul className="space-y-1">
+              {recent.map((i) => (
+                <li key={i.id}>
+                  <Link href={`/items/${i.id}`} className="flex items-center gap-2 rounded px-1 py-0.5 text-sm hover:bg-muted" title={shortPath(i.path)}>
+                    <SourceIcon kind={i.sourceKind} className="size-3.5" />
+                    <span className="truncate">{i.title}</span>
+                    <StateBadge state={i.state} sourceStatus={i.sourceStatus} />
+                    <span className="ml-auto shrink-0 text-xs text-muted-foreground">{relTime(i.modifiedAt)}</span>
+                  </Link>
+                </li>
+              ))}
+              {!recent.length && <li className="text-sm text-muted-foreground">최근 30일 안에 수정된 항목이 없습니다.</li>}
+            </ul>
+          </Panel>
+
+          <Panel title="소스 상태" action={<span className={worker.alive ? "text-xs text-muted-foreground" : "text-xs text-destructive"}>인덱서 {worker.alive ? "실행 중" : "멈춤"}</span>}>
+            <div className="space-y-1.5">
+              {srcs.map((src) => (
+                <Link key={src.id} href="/status" className="flex items-center gap-2 text-sm hover:underline">
+                  <SourceIcon kind={src.kind} />
+                  <span className="truncate">{src.name}</span>
+                  <span className="ml-auto flex shrink-0 items-center gap-2">
+                    <span className="text-xs text-muted-foreground">{src.total.toLocaleString()}</span>
+                    <SourceStatusBadge status={src.status} />
+                  </span>
+                </Link>
+              ))}
+              {!srcs.length && (
+                <p className="text-sm text-muted-foreground">
+                  연결된 소스가 없습니다. <Link href="/settings" className="underline">설정</Link>
+                </p>
+              )}
+            </div>
+          </Panel>
+        </aside>
+      </div>
+    </>
   );
 }

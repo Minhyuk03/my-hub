@@ -234,3 +234,35 @@ export const projectSuggestions = sqliteTable("project_suggestions", {
   createdAt: integer("created_at").notNull(),
   decidedAt: integer("decided_at"),
 });
+
+// ---------- 홈 화면 (북마크 바, 즐겨찾기 타일) ----------
+
+/** 북마크 바의 폴더(그룹) */
+export const bookmarkGroups = sqliteTable("bookmark_groups", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  name: text("name").notNull(),
+  order: integer("order").notNull().default(0),
+});
+
+/** 북마크. group_id 가 없으면 북마크 바에 바로 표시 */
+export const bookmarks = sqliteTable(
+  "bookmarks",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    groupId: integer("group_id").references(() => bookmarkGroups.id, { onDelete: "cascade" }),
+    title: text("title").notNull(),
+    url: text("url").notNull(),
+    order: integer("order").notNull().default(0),
+  },
+  (t) => [index("bookmarks_group").on(t.groupId, t.order)],
+);
+
+/** 홈 가운데 즐겨찾기 타일: 폴더 / 프로젝트 / 웹 주소 */
+export const shortcuts = sqliteTable("shortcuts", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  kind: text("kind").$type<"folder" | "project" | "url">().notNull(),
+  /** folder: folders.id, project: projects.id, url: 주소 */
+  target: text("target").notNull(),
+  title: text("title").notNull(),
+  order: integer("order").notNull().default(0),
+});
