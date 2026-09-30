@@ -86,7 +86,7 @@ export default async function Home() {
 
         <div className="flex flex-1 flex-col lg:flex-row">
           {/* 가운데: 검색 + 즐겨찾기 타일 */}
-          <section className="flex flex-1 flex-col items-center gap-8 px-4 py-8 lg:py-16">
+          <section className="flex flex-1 flex-col items-center gap-8 px-4 py-8 lg:py-16 2xl:pl-[400px]">
             <div className="text-center">
               <h1 className="text-4xl font-semibold tracking-tight drop-shadow-sm sm:text-5xl">
                 나의 허브
@@ -94,13 +94,13 @@ export default async function Home() {
               <p className="mt-2 text-sm text-muted-foreground">{greeting()}</p>
             </div>
             <HomeSearch />
-            <div className="grid w-full max-w-2xl grid-cols-4 gap-2 sm:grid-cols-5">
+            <div className="flex w-full max-w-2xl flex-wrap justify-center gap-2">
               {tileList.map((t) => (
                 <a
                   key={t.id}
                   href={t.href}
                   title={t.subtitle}
-                  className="group flex flex-col items-center gap-2 rounded-xl p-2 text-center hover:bg-foreground/10"
+                  className="group flex w-24 flex-col items-center gap-2 rounded-xl p-2 text-center hover:bg-foreground/10"
                 >
                   <span
                     className={`relative flex size-12 items-center justify-center rounded-full shadow-sm ${t.kind === "url" ? "bg-white" : "bg-background/90"}`}
@@ -130,7 +130,7 @@ export default async function Home() {
               ))}
               <Link
                 href="/home/edit#tiles"
-                className="flex flex-col items-center gap-2 rounded-xl p-2 text-center hover:bg-foreground/10"
+                className="flex w-24 flex-col items-center gap-2 rounded-xl p-2 text-center hover:bg-foreground/10"
               >
                 <span className="flex size-12 items-center justify-center rounded-full bg-background/90 shadow-sm">
                   <Plus className="size-5 text-muted-foreground" />
