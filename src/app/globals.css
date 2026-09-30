@@ -147,3 +147,20 @@
 .prose-hub table { border-collapse: collapse; display: block; overflow-x: auto; }
 .prose-hub th, .prose-hub td { border: 1px solid var(--border); padding: 0.3em 0.6em; }
 .prose-hub img { max-width: 100%; }
+
+/* 라이트/다크 전환을 부드럽게 (theme-toggle.tsx) */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 500ms;
+  animation-timing-function: ease-in-out;
+}
+.theme-transition,
+.theme-transition *,
+.theme-transition *::before,
+.theme-transition *::after {
+  transition:
+    background-color 500ms ease-in-out,
+    color 500ms ease-in-out,
+    border-color 500ms ease-in-out,
+    fill 500ms ease-in-out !important;
+}

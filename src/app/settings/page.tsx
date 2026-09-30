@@ -8,7 +8,7 @@ import { SOURCE_KIND_LABEL } from "@/lib/labels";
 import { getDb } from "@/server/db";
 import { sourcesWithStats } from "@/server/queries";
 import { getSettings } from "@/server/settings";
-import { removeSourceAction, saveSettings, shortcuts } from "./actions";
+import { removeSourceAction, saveHomeTitle, saveSettings, shortcuts } from "./actions";
 import { ConfirmSubmit } from "./confirm-submit";
 import { FolderPicker } from "./folder-picker";
 import { PasscodeForm } from "./passcode-form";
@@ -110,6 +110,21 @@ export default async function SettingsPage() {
           </CardContent>
         </Card>
       )}
+
+      <Card>
+        <CardHeader>
+          <CardTitle>홈 화면</CardTitle>
+          <CardDescription>홈 가운데 큰 제목 (40자까지). 북마크·즐겨찾기·배경은 홈의 &ldquo;꾸미기&rdquo;에서 바꿉니다.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <form action={saveHomeTitle} className="flex flex-wrap items-center gap-2">
+            <Input name="homeTitle" defaultValue={s.homeTitle} maxLength={40} placeholder="나의 허브" className="h-9 max-w-sm" />
+            <Button type="submit" size="sm">
+              저장
+            </Button>
+          </form>
+        </CardContent>
+      </Card>
 
       <form action={saveSettings}>
         <Card>

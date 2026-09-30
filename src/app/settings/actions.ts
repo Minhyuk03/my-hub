@@ -140,3 +140,14 @@ export async function saveSettings(form: FormData) {
   enqueue(db, "settings_changed");
   refresh();
 }
+
+/** 홈 가운데 제목 (비우면 기본값) */
+export async function saveHomeTitle(form: FormData) {
+  const t = String(form.get("homeTitle") ?? "")
+    .normalize("NFC")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 40);
+  setSetting(getDb(), "homeTitle", t || "나의 허브");
+  refresh();
+}

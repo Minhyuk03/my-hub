@@ -88,9 +88,7 @@ export default async function Home() {
           {/* 가운데: 검색 + 즐겨찾기 타일 */}
           <section className="flex flex-1 flex-col items-center gap-8 px-4 py-8 lg:py-16 2xl:pl-[400px]">
             <div className="text-center">
-              <h1 className="text-4xl font-semibold tracking-tight drop-shadow-sm sm:text-5xl">
-                나의 허브
-              </h1>
+              <h1 className="text-4xl font-semibold tracking-tight drop-shadow-sm sm:text-5xl">{s.homeTitle || "나의 허브"}</h1>
               <p className="mt-2 text-sm text-muted-foreground">{greeting()}</p>
             </div>
             <HomeSearch />
