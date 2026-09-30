@@ -5,10 +5,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Progress } from "@/components/ui/progress";
 import { bytes, fullDate, relTime, shortPath, untilTime } from "@/lib/format";
 import { ITEM_STATE_LABEL, SOURCE_KIND_LABEL } from "@/lib/labels";
-import { runEnvCheck } from "@/lib/env-check";
-import { listBackups, PENDING_DIR } from "@/server/backup";
 import { getDb } from "@/server/db";
-import { errorList, sourcesWithStats, workerStatus } from "@/server/queries";
+import { envSnapshot, errorList, sourcesWithStats, workerStatus } from "@/server/queries";
 import { getSettings } from "@/server/settings";
 import { AutoRefresh } from "./auto-refresh";
 import { backupNow, rescanSource, retryErrors } from "./actions";
@@ -19,10 +17,11 @@ export default async function StatusPage() {
   const srcs = sourcesWithStats(db);
   const errors = errorList(db);
   const worker = workerStatus(db);
-  const env = await runEnvCheck();
+  // 디스크는 직접 읽지 않고 워커가 기록한 정보만 쓴다 (권한 문제로 웹 화면이 멈추지 않게)
+  const env = envSnapshot(db);
   const settings = getSettings(db);
-  const diskBackups = listBackups(settings.backupDir);
-  const pending = listBackups(PENDING_DIR);
+  const diskBackups = env?.backups ?? [];
+  const pending = env?.pending ?? [];
   const syncing = srcs.some((s) => s.status === "syncing");
 
   return (
@@ -92,7 +91,8 @@ export default async function StatusPage() {
           <CardTitle>외장 디스크</CardTitle>
         </CardHeader>
         <CardContent className="space-y-1 text-sm">
-          {env.volumes.map((v) => (
+          {!env && <p className="text-muted-foreground">인덱서가 아직 정보를 기록하지 않았습니다.</p>}
+          {env?.volumes.map((v) => (
             <p key={v.path}>
               <code>{v.path}</code> — {v.mounted ? `연결됨 · 여유 ${bytes(v.freeBytes)} / ${bytes(v.totalBytes)}` : "분리됨"}
             </p>

@@ -2,14 +2,23 @@
 
 Mac mini에서 상시 실행되는 개인 통합 허브입니다. 외장 디스크·iCloud Drive·Obsidian 등 흩어진 작업물을 한 화면에서 검색하고, 프로젝트 단위로 묶습니다.
 
-> 현재 단계: **Phase 1** (세 소스 인덱싱, 키워드 검색, 최근 목록, 동기화 상태, 백업·복원)
+> 현재 단계: **Phase 2** (프로젝트 폴더 연결·연결 제안, launchd 상시 실행, Tailscale 외부 접속)
 
 ## 실행
 
+평소에는 launchd 서비스로 상시 실행됩니다 (로그인하면 자동 시작, 죽으면 10초 뒤 다시 시작).
+
 ```bash
-npm install
-npm run hub          # 웹(http://127.0.0.1:3000) + 인덱서 워커 함께 실행. 멈출 때는 Ctrl+C
+npm run service:status     # 실행 상태와 최근 로그
+npm run service:restart    # 코드 변경 후: 빌드 → DB 준비 → 다시 시작 (--no-build 로 빌드 생략)
+npm run service:install    # 처음 등록 (빌드 포함)
+npm run service:uninstall  # 등록 해제 (데이터·백업은 그대로)
 ```
+
+- 로그: `~/Library/Logs/my-hub/web.log`, `worker.log`
+- 실행 파일: 허브 전용 Node (`~/Library/Application Support/my-hub/runtime/current/bin/node`, nodejs.org 공식 서명본). 이 파일에 **전체 디스크 접근 권한**이 있어야 iCloud·문서·외장 디스크를 읽습니다. Homebrew node 와 무관합니다.
+- FileVault 가 켜져 있어 재부팅 후에는 한 번 로그인해야 허브가 시작됩니다. 계획된 재시동은 `sudo fdesetup authrestart` 를 쓰면 한 번 자동으로 잠금이 풀립니다.
+- 개발할 때는 서비스를 멈추고(`npm run service:uninstall`) `npm run hub` 로 실행합니다. 포트가 겹칩니다.
 
 | 명령 | 하는 일 |
 |---|---|
@@ -22,7 +31,17 @@ npm run hub          # 웹(http://127.0.0.1:3000) + 인덱서 워커 함께 실�
 | `npm run bench:hub` | 10만 개 합성 데이터 성능 측정 → `docs/phase1-performance.md` |
 | `npm run bench:korean` | 한국어 검색 방식 비교 → `docs/phase0-korean-search.md` |
 
-서버는 `127.0.0.1`에만 바인딩합니다. 외부 접속(Tailscale)은 Phase 2에서 추가합니다.
+## 접속과 인증
+
+| 주소 | 누가 | 조건 |
+|---|---|---|
+| `http://127.0.0.1:3000` | Mac mini 본인 | 없음. Finder 열기·보안 설정은 여기서만 |
+| `https://mh-macmini-1.taile87d89.ts.net` | 아이폰·노트북 (Tailscale) | 허용 목록의 Tailscale 계정 + 앱 패스코드 (기기마다 한 번, 90일 유지) |
+
+- 웹 서버(`server.ts`)는 127.0.0.1 의 3000(본인)·3001(Tailscale 전용) 두 포트만 엽니다. `tailscale serve` 가 HTTPS 를 3001 로 넘깁니다. 공용 인터넷에는 공개하지 않습니다.
+- 어느 포트로 들어왔는지는 서버가 소켓 기준으로 정합니다. 3000 으로 온 요청의 Tailscale 헤더는 지우고 무시합니다.
+- 허용 목록·패스코드는 설정 화면(Mac mini 에서만 보임)에서 바꿉니다. 패스코드는 5번 틀리면 10분 잠깁니다.
+- Tailscale 설정 되돌리기: `/Applications/Tailscale.app/Contents/MacOS/Tailscale serve reset`
 
 ## 화면
 
@@ -33,6 +52,8 @@ npm run hub          # 웹(http://127.0.0.1:3000) + 인덱서 워커 함께 실�
 | `/items/<id>` | 미리보기, 원본 다운로드, Obsidian에서 열기, Finder에서 보기(Mac mini 본인 접속만) |
 | `/status` | 소스별 상태·진행률·오류·재시도, 외장 디스크, 백업 |
 | `/settings` | 인덱싱 폴더 추가·해제, 외장 디스크에 새 폴더 만들기, 제외 규칙, 동작 설정 |
+| `/projects` | 프로젝트 목록, 폴더 이름 기반 연결 제안(수락/거절), Obsidian 1. Projects 가져오기 |
+| `/projects/<id>` | 연결된 모든 항목(소스별 필터), 폴더 연결·하위 폴더 포함·제외 항목, 최근 활동, 메모·상태 |
 | `/phase0` | 환경 점검, 한국어 검색 방식 비교 결과 |
 
 ## 구조
@@ -66,8 +87,13 @@ scripts/                 마이그레이션, 백업·복원, 성능 측정
 docs/                    검증·측정 결과
 ```
 
+### 프로젝트
+- 폴더 단위 연결이 기본입니다. `project_folders` 는 `folders.id` 를 가리키고, 폴더는 inode 로 추적되므로 이동·이름 변경에도 연결이 유지됩니다. 폴더 안의 새 파일은 자동 포함됩니다.
+- 폴더 밖 항목은 개별 추가, 폴더 안 항목은 제외할 수 있습니다 (`project_items`).
+- 연결 제안(`src/server/projects/suggest.ts`): 다른 소스끼리 이름이 같거나(정규화), 동의어 사전으로 같거나, 한글·영문 발음 뼈대가 같거나(블로그≈blog), 한 단어 이름이 다른 이름의 일부인 폴더를 근거와 함께 제안합니다. 전체 스캔 뒤 워커가 다시 계산하며, 거절한 제안은 다시 띄우지 않습니다.
+
 ### 주요 테이블
-`sources`(소스) · `folders`(폴더, inode로 이동 추적) · `items`(파일) · `item_text`(색인 원문, NFC) · `items_fts`(trigram 색인) · `items_bigram`(2글자 색인) · `item_errors`(재시도) · `scan_jobs`(스캔 진행·재개 cursor) · `tags`/`item_tags` · `item_links`(위키링크) · `settings` · `commands`(웹→워커) · `backups` · `runtime`(워커 상태)
+`sources`(소스) · `folders`(폴더, inode로 이동 추적) · `items`(파일) · `item_text`(색인 원문, NFC) · `items_fts`(trigram 색인) · `items_bigram`(2글자 색인) · `item_errors`(재시도) · `scan_jobs`(스캔 진행·재개 cursor) · `tags`/`item_tags` · `item_links`(위키링크) · `settings` · `commands`(웹→워커) · `backups` · `runtime`(워커 상태, 디스크·백업 기록) · `projects` · `project_folders` · `project_items` · `project_suggestions`
 
 ## 동기화 규칙 (요약)
 

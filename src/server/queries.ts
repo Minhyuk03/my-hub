@@ -148,3 +148,16 @@ export function itemsByIds(db: Db, ids: number[]) {
   if (!ids.length) return [];
   return db.select().from(items).where(inArray(items.id, ids)).all();
 }
+
+export type EnvSnapshot = {
+  volumes: { path: string; mounted: boolean; volumeUuid?: string; totalBytes?: number; freeBytes?: number }[];
+  backups: { name: string; path: string; createdAt: number; size: number }[];
+  pending: { name: string; path: string; createdAt: number; size: number }[];
+  at: number;
+};
+
+/** 워커가 기록한 디스크·백업 정보 */
+export function envSnapshot(db: Db): EnvSnapshot | null {
+  const row = db.select().from(runtime).where(eq(runtime.key, "env")).get();
+  return row ? (row.value as EnvSnapshot) : null;
+}

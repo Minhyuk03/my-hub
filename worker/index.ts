@@ -9,7 +9,8 @@ import fs from "node:fs";
 import path from "node:path";
 import chokidar, { type FSWatcher } from "chokidar";
 import { and, eq, gte, isNull, sql } from "drizzle-orm";
-import { applyRetention, createBackup, flushPending, realBackupEnv } from "@/server/backup";
+import { applyRetention, createBackup, flushPending, listBackups, PENDING_DIR, realBackupEnv } from "@/server/backup";
+import { runEnvCheck } from "@/lib/env-check";
 import { openDb } from "@/server/db";
 import { backups, commands, runtime, scanJobs, sources } from "@/server/db/schema";
 import { getSettings } from "@/server/settings";
@@ -168,6 +169,7 @@ async function handleCommands() {
           break;
         case "backup":
           result = doBackup();
+          await recordEnv();
           break;
         case "settings_changed":
           for (const id of [...watchers.keys()]) {
@@ -220,6 +222,20 @@ function maybeBackup() {
   }
 }
 
+/** 디스크·백업 정보를 기록한다. 웹 화면은 이 기록만 읽고 디스크를 직접 읽지 않는다. */
+async function recordEnv() {
+  const s = getSettings(db);
+  const env = await runEnvCheck();
+  const safeList = (dir: string) => {
+    try {
+      return listBackups(dir).slice(0, 30);
+    } catch {
+      return [];
+    }
+  };
+  setRuntime("env", { volumes: env.volumes, paths: env.paths, backups: safeList(s.backupDir), pending: safeList(PENDING_DIR), at: Date.now() });
+}
+
 function heartbeat() {
   const running = db.select().from(scanJobs).where(eq(scanJobs.result, "running")).all();
   setRuntime("worker", {
@@ -256,7 +272,9 @@ const timers = [
     }
   }, 60_000),
   setInterval(heartbeat, 2000),
+  setInterval(() => void recordEnv().catch((e) => log("환경 기록 오류", e)), 30_000),
 ];
+void recordEnv();
 void checkSources();
 heartbeat();
 
