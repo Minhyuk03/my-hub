@@ -110,6 +110,7 @@ export function skeleton(s: string): string {
 function scriptOf(n: string): "H" | "L" | null {
   const h = /[가-힣]/.test(n);
   const l = /[a-z]/i.test(n);
+  if (l && !h && !/[aeiou]/i.test(n)) return null; // 모음 없는 약어(scp, shp)는 발음으로 비교하지 않는다
   return h && !l ? "H" : l && !h ? "L" : null;
 }
 
