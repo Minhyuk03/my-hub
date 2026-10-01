@@ -85,6 +85,17 @@ describe("텍스트 추출", () => {
     const r = await extractText("docx", Buffer.from(zip));
     expect(r.body.trim()).toBe("워드 문서 본문");
   });
+  it("PPTX·XLSX·Jupyter 노트북 본문", async () => {
+    const pptx = zipSync({
+      "ppt/slides/slide2.xml": strToU8(`<p:sld><a:t>둘째 슬라이드</a:t></p:sld>`),
+      "ppt/slides/slide1.xml": strToU8(`<p:sld><a:t>발표 제목</a:t><a:t>&amp; 부제</a:t></p:sld>`),
+    });
+    expect((await extractText("pptx", Buffer.from(pptx))).body).toBe("발표 제목 & 부제\n둘째 슬라이드");
+    const xlsx = zipSync({ "xl/sharedStrings.xml": strToU8(`<sst><si><t>예산</t></si><si><r><t>교통</t></r><r><t>비</t></r></si></sst>`) });
+    expect((await extractText("xlsx", Buffer.from(xlsx))).body).toBe("예산\n교통비");
+    const nb = JSON.stringify({ cells: [{ cell_type: "markdown", source: ["# 세미나\n", "설명"] }, { cell_type: "code", source: "import numpy" }, { cell_type: "raw", source: "x" }] });
+    expect((await extractText("ipynb", Buffer.from(nb))).body).toBe("# 세미나\n설명\n\nimport numpy");
+  });
   it("PDF 본문", async () => {
     const r = await extractText("pdf", minimalPdf("Hello PDF 2026"));
     expect(r.body).toContain("Hello PDF 2026");

@@ -166,23 +166,32 @@ export function computeSuggestions(db: Db): SuggestionDraft[] {
     if (sk.replace(/\d/g, "").length >= 3) add(`skel:${sk}`, 70, "한글·영문 표기만 다름", c.id);
   }
   // 일부 일치: 한 단어 폴더 이름이 다른 폴더 이름의 단어와 같음
+  // 단어가 그대로 같거나(동의어 포함), 발음 뼈대가 4자 이상 같을 때만. 짧은 뼈대는 우연히 겹치기 쉽다 (tools ≈ 테트라워치)
+  const tokenKeys = (t: string) => {
+    const n = syn.get(normalizeName(t)) ?? normalizeName(t);
+    const keys = n.length >= 2 ? [`w:${n}`] : [];
+    const sk = skeleton(n);
+    if (sk.replace(/\d/g, "").length >= 4) keys.push(`s:${sk}`);
+    return keys;
+  };
   const tokenIndex = new Map<string, Set<number>>();
   for (const c of cands) {
     for (const t of tokens(c.name)) {
-      const sk = skeleton(syn.get(normalizeName(t)) ?? normalizeName(t));
-      if (sk.length < 3) continue;
-      if (!tokenIndex.has(sk)) tokenIndex.set(sk, new Set());
-      tokenIndex.get(sk)!.add(c.id);
+      for (const k of tokenKeys(t)) {
+        if (!tokenIndex.has(k)) tokenIndex.set(k, new Set());
+        tokenIndex.get(k)!.add(c.id);
+      }
     }
   }
   for (const c of cands) {
     const t = tokens(c.name);
     if (t.length !== 1) continue;
-    const sk = skeleton(syn.get(normalizeName(t[0])) ?? normalizeName(t[0]));
-    for (const other of tokenIndex.get(sk) ?? []) {
-      if (other === c.id) continue;
-      add(`part:${c.id}`, 55, `'${c.name}' 이(가) 다른 폴더 이름의 일부`, c.id);
-      add(`part:${c.id}`, 55, `'${c.name}' 이(가) 다른 폴더 이름의 일부`, other);
+    for (const k of tokenKeys(t[0])) {
+      for (const other of tokenIndex.get(k) ?? []) {
+        if (other === c.id) continue;
+        add(`part:${c.id}`, 55, `'${c.name}' 이(가) 다른 폴더 이름의 일부`, c.id);
+        add(`part:${c.id}`, 55, `'${c.name}' 이(가) 다른 폴더 이름의 일부`, other);
+      }
     }
   }
 

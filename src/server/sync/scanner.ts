@@ -253,7 +253,8 @@ export async function processFile(
     existing.modifiedAt === mtime &&
     existing.size === st.size &&
     existing.fileId === st.ino &&
-    (existing.state === "cloud_only") === dataless
+    (existing.state === "cloud_only") === dataless &&
+    !(existing.noContentReason === "unsupported" && isExtractable(ext))
   ) {
     if (jobId) db.update(items).set({ seenScanId: jobId }).where(eq(items.id, existing.id)).run();
     return existing;
@@ -484,7 +485,7 @@ export function purgeExcluded(db: Db, settings: Settings = getSettings(db)): num
     return p
       .slice(root.length + 1)
       .split("/")
-      .some((seg) => isExcludedName(seg, settings.excludedPatterns));
+      .some((seg) => isExcludedName(seg.replace(/#[A-Za-z0-9_-]+$/, ""), settings.excludedPatterns));
   };
   const rows = db.select({ id: items.id, path: items.path, sourceId: items.sourceId }).from(items).all().filter((r) => excluded(r.path, r.sourceId));
   db.transaction((tx) => {

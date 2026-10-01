@@ -16,7 +16,8 @@ export function kindOf(ext: string): ItemKind {
   const e = ext.toLowerCase();
   if (e === "md" || e === "markdown") return "note";
   if (e === "pdf") return "pdf";
-  if (e === "docx" || e === "hwpx" || TEXT_EXT.has(e)) return "document";
+  if (e === "docx" || e === "hwpx" || e === "pptx" || e === "xlsx" || TEXT_EXT.has(e)) return "document";
+  if (e === "ipynb") return "code";
   if (CODE_EXT.has(e)) return "code";
   if (IMAGE_EXT.has(e)) return "image";
   if (VIDEO_EXT.has(e)) return "video";
@@ -41,6 +42,9 @@ export async function extractText(ext: string, buf: Buffer): Promise<Extracted> 
   if (e === "pdf") return { body: await pdfText(buf), tags: [], links: [] };
   if (e === "docx") return { body: await docxText(buf), tags: [], links: [] };
   if (e === "hwpx") return { body: hwpxText(buf), tags: [], links: [] };
+  if (e === "pptx") return { body: pptxText(buf), tags: [], links: [] };
+  if (e === "xlsx") return { body: xlsxText(buf), tags: [], links: [] };
+  if (e === "ipynb") return { body: ipynbText(buf), tags: [], links: [] };
   if (buf.subarray(0, 8000).includes(0)) throw new BinaryContentError("텍스트 파일이 아님");
   const text = buf.toString("utf8");
   if (e === "md" || e === "markdown") return markdown(text);
@@ -104,4 +108,37 @@ function decodeXml(s: string) {
     .replace(/&quot;/g, '"')
     .replace(/&apos;/g, "'")
     .replace(/&amp;/g, "&");
+}
+
+const num = (name: string) => Number(name.match(/(\d+)\.xml$/)?.[1] ?? 0);
+
+/** PPTX: 슬라이드마다 <a:t> 글자를 모은다 */
+export function pptxText(buf: Buffer): string {
+  const files = unzipSync(new Uint8Array(buf), { filter: (f) => /^ppt\/slides\/slide\d+\.xml$/.test(f.name) });
+  return Object.keys(files)
+    .sort((a, b) => num(a) - num(b))
+    .map((n) => [...strFromU8(files[n]).matchAll(/<a:t>([\s\S]*?)<\/a:t>/g)].map((m) => decodeXml(m[1])).join(" "))
+    .filter(Boolean)
+    .join("\n");
+}
+
+/** XLSX: 공유 문자열(셀 글자)을 모은다. 숫자 셀은 색인하지 않는다 */
+export function xlsxText(buf: Buffer): string {
+  const files = unzipSync(new Uint8Array(buf), { filter: (f) => f.name === "xl/sharedStrings.xml" || /^xl\/worksheets\/sheet\d+\.xml$/.test(f.name) });
+  const shared = files["xl/sharedStrings.xml"] ? strFromU8(files["xl/sharedStrings.xml"]) : "";
+  const strings = [...shared.matchAll(/<si>([\s\S]*?)<\/si>/g)].map((m) => [...m[1].matchAll(/<t[^>]*>([\s\S]*?)<\/t>/g)].map((t) => decodeXml(t[1])).join(""));
+  // 셀 안에 바로 적힌 글자(inlineStr)도 포함
+  const inline = Object.keys(files)
+    .filter((n) => n.startsWith("xl/worksheets/"))
+    .flatMap((n) => [...strFromU8(files[n]).matchAll(/<is>[\s\S]*?<t[^>]*>([\s\S]*?)<\/t>/g)].map((m) => decodeXml(m[1])));
+  return [...strings, ...inline].filter(Boolean).join("\n");
+}
+
+/** Jupyter 노트북: 마크다운·코드 셀 내용 */
+export function ipynbText(buf: Buffer): string {
+  const nb = JSON.parse(buf.toString("utf8")) as { cells?: { cell_type: string; source: string | string[] }[] };
+  return (nb.cells ?? [])
+    .filter((c) => c.cell_type === "markdown" || c.cell_type === "code")
+    .map((c) => (Array.isArray(c.source) ? c.source.join("") : c.source))
+    .join("\n\n");
 }

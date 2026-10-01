@@ -132,6 +132,16 @@ describe("Google Drive 연결 (Phase 3a)", () => {
     expect(fake.calls.some((c) => c.includes("?alt=media") && c.includes("F4"))).toBe(false);
   });
 
+  it("숨김 파일(.DS_Store)·제외 이름은 가져오지 않는다", async () => {
+    const { db, fake, src, d } = setup();
+    fake.add({ name: ".DS_Store", parent: "ROOT", content: "x" });
+    fake.add({ name: "node_modules", parent: "ROOT", mimeType: FOLDER_MIME });
+    fake.add({ name: "보고서.txt", parent: "ROOT", content: "x" });
+    await runDriveScan(db, src.id, d);
+    expect(titles(db)).toEqual(["보고서.txt"]);
+    expect(db.select().from(folders).all().map((f) => f.name)).not.toContain("node_modules");
+  });
+
   it("바뀌지 않은 파일은 다시 받지 않는다", async () => {
     const { db, fake, src, d } = setup();
     fake.add({ name: "메모.txt", parent: "ROOT", content: "x" });

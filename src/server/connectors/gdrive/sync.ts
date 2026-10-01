@@ -16,6 +16,7 @@ import { extractText, isExtractable, kindOf } from "../../extract";
 import { removeItemText, writeItemText } from "../../search/index-writer";
 import { getSettings, type Settings } from "../../settings";
 import { finalizeDeletions, purgeExcluded, recordError } from "../../sync/scanner";
+import { isExcludedName } from "../../sources/rules";
 import { EXPORTS, FOLDER_MIME, SHORTCUT_MIME, TokenError, type DriveClient, type DriveFile } from "./client";
 
 type Source = typeof sources.$inferSelect;
@@ -83,7 +84,15 @@ export async function processDriveFile(db: Db, src: Source, client: DriveClient,
   let existing = db.select().from(items).where(and(eq(items.sourceId, src.id), eq(items.externalId, f.id))).get();
 
   // 내용이 그대로면 경로만 맞추고 다시 받지 않는다
-  if (existing && existing.state !== "deleted" && existing.state !== "extract_failed" && existing.contentHash === version && existing.modifiedAt === modifiedAt) {
+  const nowExtractable = !!ex || isExtractable(ext);
+  if (
+    existing &&
+    existing.state !== "deleted" &&
+    existing.state !== "extract_failed" &&
+    existing.contentHash === version &&
+    existing.modifiedAt === modifiedAt &&
+    !(existing.noContentReason === "unsupported" && nowExtractable)
+  ) {
     if (existing.path !== path || existing.title !== f.name.normalize("NFC")) {
       db.update(items).set({ path, title: f.name.normalize("NFC"), folderId }).where(eq(items.id, existing.id)).run();
       const body = (db.$client.prepare(`SELECT body FROM item_text WHERE item_id = ?`).pluck().get(existing.id) as string | undefined) ?? "";
@@ -164,6 +173,7 @@ async function scanFolder(db: Db, src: Source, d: DriveSyncDeps, folder: { id: s
     const page = await d.client.listChildren(folder.id, pageToken);
     for (const f of page.files) {
       if (f.trashed || f.mimeType === SHORTCUT_MIME) continue;
+      if (isExcludedName(f.name, settings.excludedPatterns)) continue; // 숨김 파일(.DS_Store 등)·제외 이름
       if (f.mimeType === FOLDER_MIME) {
         const p = `${folder.path}/${seg(f.name, f.id)}`;
         subs.push({ id: f.id, path: p, rowId: upsertDriveFolder(db, src, f.id, f.name, p, ts(f.modifiedTime), jobId) });
@@ -311,6 +321,7 @@ export async function runDriveChanges(db: Db, sourceId: number, d: DriveSyncDeps
           continue;
         }
         if (f.mimeType === SHORTCUT_MIME) continue;
+        if (isExcludedName(f.name, settings.excludedPatterns)) continue;
         // 부모 폴더가 이 소스 안에 있는지 확인 (없으면 범위 밖으로 옮겨진 것)
         const parentId = f.parents?.[0];
         const parent = parentId
