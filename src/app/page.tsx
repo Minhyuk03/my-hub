@@ -12,14 +12,12 @@ import {
   activeFolders,
   recentItems,
   sourcesWithStats,
-  workerStatus,
 } from "@/server/queries";
 import { getSettings } from "@/server/settings";
 import { eq } from "drizzle-orm";
 import { Agenda } from "@/components/home/agenda";
 import type { CalendarSnapshot } from "@/server/calendar";
 import { runtime } from "@/server/db/schema";
-import { staleProjects } from "@/server/projects/stale";
 import { driveExpiry } from "@/server/connectors/gdrive/client";
 
 function Panel({
@@ -65,13 +63,7 @@ export default async function Home() {
   const projectsActive = activeProjects(db);
   const folders = projectsActive.length ? [] : activeFolders(db, since14, 5);
   const srcs = sourcesWithStats(db);
-  const stale = staleProjects(db);
   const calendar = s.calendarEnabled ? ((db.select().from(runtime).where(eq(runtime.key, "calendar")).get()?.value as CalendarSnapshot | undefined) ?? null) : null;
-  const worker = workerStatus(db);
-  const offline = srcs.filter((x) => x.status === "offline").length;
-  const errors = srcs.filter((x) => x.status === "error").length;
-  const syncing = srcs.some((x) => x.status === "syncing");
-  const problem = offline + errors > 0;
   const exp = driveExpiry(s.gdriveAccount, s.gdriveTestingMode);
   const driveOffline = srcs.find((x) => x.kind === "gdrive" && x.status === "offline" && /만료|연결되어 있지/.test(x.lastError ?? ""));
   const driveNotice = driveOffline
@@ -99,7 +91,7 @@ export default async function Home() {
         )}
       </div>
 
-      {/* 홈은 화면 전체 폭을 쓴다: 위 북마크 바, 알림 줄, 가운데 검색·타일·카드 */}
+      {/* 홈은 화면 전체 폭을 쓴다: 위 북마크 바, 가운데 검색·타일·카드 */}
       <div className="-my-6 mx-[calc(50%-50vw)] flex min-h-[calc(100dvh-61px)] flex-col">
         <BookmarkBar root={bar.root} groups={bar.groups} />
         {driveNotice && (
@@ -108,31 +100,8 @@ export default async function Home() {
           </a>
         )}
 
-        {/* 알림 줄: 소스 상태·쉬는 프로젝트를 작게. 문제가 있을 때만 색으로 눈에 띄게 */}
-        <div className="flex flex-wrap items-center justify-center gap-2 px-4 pt-4 text-xs">
-          <Link
-            href="/status"
-            className={`flex items-center gap-1.5 rounded-full border bg-background/70 px-3 py-1 backdrop-blur hover:bg-background ${problem ? "border-amber-500/60 text-amber-700 dark:text-amber-400" : "text-muted-foreground"}`}
-          >
-            <span className={`size-1.5 rounded-full ${!worker.alive ? "bg-destructive" : problem ? "bg-amber-500" : syncing ? "bg-sky-500" : "bg-emerald-500"}`} />
-            {!worker.alive
-              ? "인덱서 멈춤"
-              : problem
-                ? `소스 ${srcs.length}개 중 ${[offline && `오프라인 ${offline}`, errors && `오류 ${errors}`].filter(Boolean).join(" · ")}`
-                : syncing
-                  ? `동기화 중 · 소스 ${srcs.length}개`
-                  : `소스 ${srcs.length}개 모두 정상`}
-          </Link>
-          {stale.length > 0 && (
-            <Link href="/projects#stale" className="flex items-center gap-1.5 rounded-full border bg-background/70 px-3 py-1 text-muted-foreground backdrop-blur hover:bg-background">
-              <span className="size-1.5 rounded-full bg-amber-500" />
-              쉬고 있는 프로젝트 {stale.length}개
-            </Link>
-          )}
-        </div>
-
         {/* 가운데: 제목·검색·즐겨찾기, 그 아래 카드 */}
-        <section className="mx-auto flex w-full max-w-6xl flex-1 flex-col items-center gap-8 px-4 pb-10 pt-6 lg:pt-12">
+        <section className="mx-auto flex w-full max-w-6xl flex-1 flex-col items-center gap-8 px-4 pb-10 pt-10 lg:pt-16">
           <div className="text-center">
             <h1 className="text-4xl font-semibold tracking-tight drop-shadow-sm sm:text-5xl">{s.homeTitle || "나의 허브"}</h1>
             <p className="mt-2 text-sm text-muted-foreground">{greeting()}</p>
