@@ -6,6 +6,7 @@ const NAV = [
   { href: "/", label: "홈" },
   { href: "/graph", label: "그래프" },
   { href: "/projects", label: "프로젝트" },
+  { href: "/chat", label: "AI 채팅" },
   { href: "/ai", label: "AI 정리" },
   { href: "/status", label: "동기화 상태" },
   { href: "/settings", label: "설정" },

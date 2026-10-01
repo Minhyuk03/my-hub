@@ -377,6 +377,9 @@ const ollama = new Ollama(realOllama());
 let aiRunning = false;
 async function aiTick(force = false) {
   if (aiRunning || stopping || (!force && (current || queue.length))) return;
+  // 채팅 중에는 메모리를 위해 쉰다 (대화 모델 + 임베딩 모델만 올라가게)
+  const chat = db.select().from(runtime).where(eq(runtime.key, "chat_active")).get()?.value as { until?: number } | undefined;
+  if (!force && chat?.until && chat.until > Date.now()) return;
   aiRunning = true;
   try {
     const t0 = Date.now();

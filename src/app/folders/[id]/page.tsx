@@ -13,6 +13,19 @@ import { folders, items, projects, shortcuts, sources } from "@/server/db/schema
 import { isLocalRequest } from "@/server/http/local";
 import { linkFolderToProject, pinFolder } from "./actions";
 import { FinderButton } from "./finder-button";
+import { PolicyToggle } from "@/components/policy-toggle";
+import { isDirectlyDenied } from "@/server/chat/policy";
+import { externalDeny } from "@/server/db/schema";
+import type { Db } from "@/server/db";
+
+/** 상위(소스·상위 폴더)에서 이미 금지된 이유 */
+function folderInherited(db: Db, f: { id: number; path: string }, s: { name: string; config: Record<string, unknown> }) {
+  const out: string[] = [];
+  if (s.config.externalAi === "deny") out.push(`소스 "${s.name}"`);
+  const denied = db.select({ id: folders.id, name: folders.name, path: folders.path }).from(externalDeny).innerJoin(folders, eq(folders.id, externalDeny.targetId)).where(eq(externalDeny.targetKind, "folder")).all();
+  for (const d of denied) if (d.id !== f.id && f.path.startsWith(d.path + "/")) out.push(`폴더 "${d.name}"`);
+  return out;
+}
 import { folderUrl } from "@/server/connectors/gdrive/client";
 
 export default async function FolderPage({ params }: PageProps<"/folders/[id]">) {
@@ -74,6 +87,7 @@ export default async function FolderPage({ params }: PageProps<"/folders/[id]">)
             Google Drive에서 열기
           </a>
         )}
+        <PolicyToggle kind="folder" id={f.id} denied={isDirectlyDenied(db, "folder", f.id)} inherited={folderInherited(db, f, s)} />
         {!pinned && (
           <form action={pinFolder.bind(null, f.id)}>
             <Button type="submit" variant="outline" size="sm">

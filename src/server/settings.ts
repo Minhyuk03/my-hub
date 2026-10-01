@@ -44,6 +44,16 @@ export const DEFAULT_SETTINGS = {
   aiStructuralTags: ["para", "daily", "weekly"] as string[],
   /** 1분마다 만들 의미 검색 조각 수 */
   aiChunkBudget: 192 as number,
+  /** AI 채팅 (Phase 5) */
+  /** 측정 결과(scripts/ai/bench-chat.ts): 근거 부족·출처 표시·가짜 지시 무시를 가장 잘 지킴 */
+  chatLocalModel: "gemma3:4b" as string,
+  chatClaudeModel: "claude-sonnet-5-5" as string,
+  /** 비어 있으면 OpenAI 를 쓰기 전에 설정에서 고른다 */
+  chatOpenAiModel: "" as string,
+  /** 요청 하나에 넣는 자료 글자 수 상한 (외부 모델) */
+  chatMaxContextChars: 12000 as number,
+  /** 하루 외부 AI 요청 횟수 상한 */
+  chatDailyExternalLimit: 100 as number,
 };
 
 export type Settings = typeof DEFAULT_SETTINGS;

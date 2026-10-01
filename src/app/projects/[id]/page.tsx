@@ -14,6 +14,7 @@ import { excludedItems, projectFolderList, projectItemList } from "@/server/proj
 import { ConfirmSubmit } from "@/app/settings/confirm-submit";
 import { deleteProjectAction, itemRuleAction, saveProjectAction, toggleSubfoldersAction, unlinkFolderAction } from "../actions";
 import { FolderLinker } from "./folder-linker";
+import { PolicyToggle } from "@/components/policy-toggle";
 
 function dayLabel(ms: number) {
   const d = new Date(ms);
@@ -66,7 +67,11 @@ export default async function ProjectPage({ params, searchParams }: PageProps<"/
           <Link href={`/search?project=${p.id}`} className={buttonVariants({ variant: "ghost" })}>
             이 프로젝트에서 검색
           </Link>
+          <Link href={`/chat?project=${p.id}`} className={buttonVariants({ variant: "ghost" })}>
+            AI 에게 묻기
+          </Link>
         </div>
+        <PolicyToggle kind="project" id={p.id} denied={p.externalPolicy === "deny"} />
         <textarea name="memo" defaultValue={p.memo} placeholder="메모" rows={3} className="w-full rounded-md border bg-background p-2 text-sm" />
       </form>
 
@@ -91,7 +96,7 @@ export default async function ProjectPage({ params, searchParams }: PageProps<"/
               )}
             </CardHeader>
             <CardContent>
-              {!list.items.length && <p className="text-sm text-muted-foreground">연결된 항목이 없습니다. 연결된 항목이 없습니다. 오른쪽에서 폴더를 연결하세요.ldquo;연결된 폴더연결된 항목이 없습니다. 오른쪽에서 폴더를 연결하세요.rdquo;에서 폴더를 찾아 연결하세요.</p>}
+              {!list.items.length && <p className="text-sm text-muted-foreground">연결된 항목이 없습니다. 오른쪽에서 폴더를 연결하세요.</p>}
               <div className="divide-y">
                 {list.items.map((i) => (
                   <div key={i.id} className="flex items-start gap-1">

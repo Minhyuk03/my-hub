@@ -346,3 +346,89 @@ export const itemChunkState = sqliteTable("item_chunk_state", {
   chunks: integer("chunks").notNull(),
   createdAt: integer("created_at").notNull(),
 });
+
+// ---------- Phase 5: AI 채팅 (6장 정책) ----------
+
+/** 외부 AI(Claude·OpenAI) 전송 금지 지정. 폴더는 하위 전체에 적용. 소스는 sources.config.externalAi, 프로젝트는 projects.external_policy */
+export const externalDeny = sqliteTable(
+  "external_deny",
+  {
+    targetKind: text("target_kind").$type<"folder" | "item">().notNull(),
+    targetId: integer("target_id").notNull(),
+    createdAt: integer("created_at").notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.targetKind, t.targetId] })],
+);
+
+export type ChatProvider = "local" | "claude" | "openai";
+export type ChatScope = { kind: "all" } | { kind: "project"; projectId: number } | { kind: "items"; itemIds: number[] };
+
+export const chatThreads = sqliteTable("chat_threads", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  title: text("title").notNull(),
+  scope: text("scope", { mode: "json" }).$type<ChatScope>().notNull(),
+  createdAt: integer("created_at").notNull(),
+  updatedAt: integer("updated_at").notNull(),
+});
+
+export const chatMessages = sqliteTable(
+  "chat_messages",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    threadId: integer("thread_id").notNull().references(() => chatThreads.id, { onDelete: "cascade" }),
+    role: text("role").$type<"user" | "assistant">().notNull(),
+    content: text("content").notNull(),
+    provider: text("provider").$type<ChatProvider>(),
+    model: text("model"),
+    /** 외부 전송 금지 자료에서 나온 답 (파생 데이터 정책 상속): 이후 외부 AI 요청의 대화 이력에서 뺀다 */
+    localOnly: integer("local_only", { mode: "boolean" }).notNull().default(false),
+    /** 근거가 부족해 AI 를 부르지 않고 답한 경우 */
+    insufficient: integer("insufficient", { mode: "boolean" }).notNull().default(false),
+    /** 외부 금지라 뺀 자료 수 */
+    excludedCount: integer("excluded_count").notNull().default(0),
+    error: text("error"),
+    createdAt: integer("created_at").notNull(),
+  },
+  (t) => [index("chat_messages_thread").on(t.threadId, t.id)],
+);
+
+/** 답변 당시 AI 에게 준 자료(원문 조각 사본). 원본이 바뀌어도 그대로 남는다 */
+export const chatCitations = sqliteTable(
+  "chat_citations",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    messageId: integer("message_id").notNull().references(() => chatMessages.id, { onDelete: "cascade" }),
+    n: integer("n").notNull(),
+    itemId: integer("item_id").notNull(),
+    chunkId: integer("chunk_id"),
+    title: text("title").notNull(),
+    path: text("path").notNull(),
+    quote: text("quote").notNull(),
+    /** 답변 본문에 [n] 으로 실제 인용됐는지 */
+    cited: integer("cited", { mode: "boolean" }).notNull().default(false),
+  },
+  (t) => [index("chat_citations_message").on(t.messageId), index("chat_citations_item").on(t.itemId)],
+);
+
+/** 외부 AI 전송 기록: 요청마다 어떤 항목·조각을 보냈는지 */
+export const externalLog = sqliteTable(
+  "external_log",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    createdAt: integer("created_at").notNull(),
+    provider: text("provider").$type<"claude" | "openai">().notNull(),
+    model: text("model").notNull(),
+    threadId: integer("thread_id"),
+    messageId: integer("message_id"),
+    question: text("question").notNull(),
+    itemIds: text("item_ids", { mode: "json" }).$type<number[]>().notNull(),
+    chunkIds: text("chunk_ids", { mode: "json" }).$type<number[]>().notNull(),
+    historyCount: integer("history_count").notNull().default(0),
+    chars: integer("chars").notNull(),
+    inputTokens: integer("input_tokens"),
+    outputTokens: integer("output_tokens"),
+    status: text("status").$type<"sending" | "ok" | "error" | "blocked">().notNull(),
+    error: text("error"),
+  },
+  (t) => [index("external_log_time").on(t.createdAt)],
+);

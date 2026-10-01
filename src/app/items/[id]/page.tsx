@@ -25,6 +25,8 @@ import { ItemAi } from "./item-ai";
 import { enqueue } from "@/server/sources/manage";
 import { getSettings } from "@/server/settings";
 import { LocalOpenButtons } from "./open-buttons";
+import { PolicyToggle } from "@/components/policy-toggle";
+import { explain, isDirectlyDenied, reasonLabel } from "@/server/chat/policy";
 import { AutoRefresh } from "@/app/status/auto-refresh";
 
 const LANG: Record<string, string> = { ts: "typescript", tsx: "tsx", js: "javascript", jsx: "jsx", mjs: "javascript", cjs: "javascript", py: "python", rb: "ruby", rs: "rust", kt: "kotlin", sh: "bash", zsh: "bash", yml: "yaml", md: "markdown", h: "c", hpp: "cpp" };
@@ -187,6 +189,15 @@ export default async function ItemPage({ params, searchParams }: PageProps<"/ite
         )}
         {/* 서버에서 프로그램을 실행하는 버튼은 Mac mini 본인 접속에서만 보인다 */}
         {available && local && !["gdrive", "notion", "github", "figma"].includes(source.kind) && <LocalOpenButtons id={item.id} hasEditor={hasEditor} />}
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2">
+        <PolicyToggle kind="item" id={item.id} denied={isDirectlyDenied(db, "item", item.id)} inherited={(explain(db, [item.id]).get(item.id) ?? []).filter((r) => r.kind !== "item").map(reasonLabel)} />
+        {item.state !== "deleted" && (
+          <a href={`/chat?items=${item.id}`} className={buttonVariants({ variant: "outline", size: "sm" })}>
+            이 문서로 AI 에게 묻기
+          </a>
+        )}
       </div>
 
       <ItemProjects itemId={item.id} memberOf={memberOf} projects={allProjects} />

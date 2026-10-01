@@ -10,6 +10,10 @@ import { sourcesWithStats } from "@/server/queries";
 import { getSettings } from "@/server/settings";
 import { removeSourceAction, saveHomeTitle, saveSettings, shortcuts } from "./actions";
 import { ConfirmSubmit } from "./confirm-submit";
+import { PolicyToggle } from "@/components/policy-toggle";
+import { denyList } from "@/server/chat/policy";
+import { hasKey } from "@/server/chat/llm";
+import { saveChatSettings } from "./chat-actions";
 import { FolderPicker } from "./folder-picker";
 import { PasscodeForm } from "./passcode-form";
 import { DrivePicker } from "./drive-picker";
@@ -77,7 +81,9 @@ export default async function SettingsPage({ searchParams }: PageProps<"/setting
               <span className="text-xs text-muted-foreground">{SOURCE_KIND_LABEL[src.kind]}</span>
               <SourceStatusBadge status={src.status} />
               <span className="w-full truncate pl-6 text-xs text-muted-foreground sm:w-auto sm:pl-0">{shortPath(src.rootPath)}</span>
-              <form action={removeSourceAction.bind(null, src.id)} className="ml-auto">
+              <span className="ml-auto" />
+              <PolicyToggle kind="source" id={src.id} denied={(src.config as Record<string, unknown>).externalAi === "deny"} />
+              <form action={removeSourceAction.bind(null, src.id)}>
                 <ConfirmSubmit message={`'${src.name}' 을(를) 인덱싱에서 뺄까요? 실제 파일은 그대로 남습니다. 이 폴더들에 걸린 프로젝트 연결도 함께 해제됩니다.`}>등록 해제</ConfirmSubmit>
               </form>
             </div>
@@ -267,6 +273,73 @@ export default async function SettingsPage({ searchParams }: PageProps<"/setting
               <FigmaTargetForm />
             </>
           )}
+        </CardContent>
+      </Card>
+
+      <Card id="chat">
+        <CardHeader>
+          <CardTitle>AI 채팅</CardTitle>
+          <CardDescription>
+            모델 이름과 외부 전송 한도. API 키는 여기서 넣지 않고 <code>.env.local</code> 에 직접 넣습니다 (ANTHROPIC_API_KEY, OPENAI_API_KEY). 지금: Claude 키{" "}
+            {hasKey(process.env, "claude") ? "있음" : "없음"} · OpenAI 키 {hasKey(process.env, "openai") ? "있음" : "없음"}
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3 text-sm">
+          <form action={saveChatSettings} className="grid gap-2 sm:grid-cols-2">
+            <label className="space-y-1">
+              <span className="text-muted-foreground">로컬 AI 모델 (Ollama)</span>
+              <Input name="chatLocalModel" defaultValue={s.chatLocalModel} className="h-9" />
+            </label>
+            <label className="space-y-1">
+              <span className="text-muted-foreground">Claude 모델</span>
+              <Input name="chatClaudeModel" defaultValue={s.chatClaudeModel} className="h-9" />
+            </label>
+            <label className="space-y-1">
+              <span className="text-muted-foreground">ChatGPT 모델</span>
+              <Input name="chatOpenAiModel" defaultValue={s.chatOpenAiModel} placeholder="예: OpenAI 모델 이름" className="h-9" />
+            </label>
+            <label className="space-y-1">
+              <span className="text-muted-foreground">요청 하나에 보내는 자료 글자 수 상한</span>
+              <Input name="chatMaxContextChars" type="number" min={2000} max={60000} defaultValue={s.chatMaxContextChars} className="h-9" />
+            </label>
+            <label className="space-y-1">
+              <span className="text-muted-foreground">하루 외부 AI 요청 횟수 상한</span>
+              <Input name="chatDailyExternalLimit" type="number" min={0} max={2000} defaultValue={s.chatDailyExternalLimit} className="h-9" />
+            </label>
+            <div className="flex items-end">
+              <Button type="submit" size="sm">
+                저장
+              </Button>
+            </div>
+          </form>
+          <div className="space-y-1 border-t pt-3">
+            <p className="font-medium">🔒 외부 AI 전송 금지 목록</p>
+            <p className="text-xs text-muted-foreground">
+              소스(위 목록)·폴더·프로젝트·항목 화면의 🔒 버튼으로 지정합니다. 여러 곳에 걸리면 하나라도 금지면 금지이고, 로컬 AI 에는 쓸 수 있습니다.
+            </p>
+            {(() => {
+              const d = denyList(db);
+              const rows = [
+                ...d.sources.map((x) => ({ k: `s${x.id}`, label: `소스 · ${x.name}`, href: "/settings" })),
+                ...d.projects.map((x) => ({ k: `p${x.id}`, label: `프로젝트 · ${x.name}`, href: `/projects/${x.id}` })),
+                ...d.folders.map((x) => ({ k: `f${x.id}`, label: `폴더 · ${x.name}`, href: `/folders/${x.id}` })),
+                ...d.items.map((x) => ({ k: `i${x.id}`, label: `항목 · ${x.name}`, href: `/items/${x.id}` })),
+              ];
+              return rows.length ? (
+                <ul className="flex flex-wrap gap-1">
+                  {rows.map((r) => (
+                    <li key={r.k}>
+                      <a href={r.href} className="rounded border px-2 py-0.5 text-xs hover:bg-muted">
+                        {r.label}
+                      </a>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-xs text-muted-foreground">지정된 곳이 없습니다.</p>
+              );
+            })()}
+          </div>
         </CardContent>
       </Card>
 
