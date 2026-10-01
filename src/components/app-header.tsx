@@ -1,9 +1,9 @@
 import Link from "next/link";
 import { SearchPalette } from "./search-palette";
 import { ThemeToggle } from "./theme-toggle";
+import { NavButtons } from "./nav-buttons";
 
 const NAV = [
-  { href: "/", label: "홈" },
   { href: "/graph", label: "그래프" },
   { href: "/projects", label: "프로젝트" },
   { href: "/chat", label: "AI 채팅" },
@@ -15,7 +15,8 @@ const NAV = [
 export function AppHeader() {
   return (
     <header className="sticky top-0 z-10 border-b bg-background/90 backdrop-blur">
-      <div className="flex w-full flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3 sm:px-6">
+      <div className="flex w-full flex-wrap items-center gap-x-3 gap-y-2 px-4 py-3 sm:px-6">
+        <NavButtons />
         <Link href="/" className="font-semibold">
           나의 허브
         </Link>
