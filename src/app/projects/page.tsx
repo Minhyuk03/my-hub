@@ -11,7 +11,9 @@ import { getDb } from "@/server/db";
 import type { ProjectStatus } from "@/server/db/schema";
 import { projectList } from "@/server/projects";
 import { pendingSuggestions } from "@/server/projects/suggest";
-import { acceptSuggestionAction, createProjectAction, refreshSuggestionsAction, rejectSuggestionAction } from "./actions";
+import { acceptSuggestionAction, createProjectAction, refreshSuggestionsAction, rejectSuggestionAction, staleAction } from "./actions";
+import { staleProjects } from "@/server/projects/stale";
+import { getSettings } from "@/server/settings";
 
 export default async function ProjectsPage({ searchParams }: PageProps<"/projects">) {
   await connection();
@@ -20,6 +22,8 @@ export default async function ProjectsPage({ searchParams }: PageProps<"/project
   const db = getDb();
   const list = projectList(db, status);
   const suggestions = pendingSuggestions(db);
+  const stale = staleProjects(db);
+  const staleDays = getSettings(db).staleProjectDays;
 
   return (
     <div className="space-y-4">
@@ -41,6 +45,44 @@ export default async function ProjectsPage({ searchParams }: PageProps<"/project
         <Input name="name" placeholder="새 프로젝트 이름" required />
         <Button type="submit">만들기</Button>
       </form>
+
+      {stale.length > 0 && !status && (
+        <Card id="stale">
+          <CardHeader>
+            <CardTitle>쉬고 있는 프로젝트 ({stale.length})</CardTitle>
+            <CardDescription>
+              &ldquo;진행중&rdquo;인데 연결된 파일이 {staleDays}일 넘게 바뀌지 않았습니다. 끝난 프로젝트는 완료로, 잠시 멈춘 것은 보류로 바꾸면 홈 알림에서 빠집니다.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="divide-y text-sm">
+            {stale.map((p) => (
+              <div key={p.id} className="flex flex-wrap items-center gap-2 py-2">
+                <Link href={`/projects/${p.id}`} className="truncate font-medium hover:underline">
+                  {p.name}
+                </Link>
+                <span className="text-xs text-muted-foreground">{p.idleDays}일째 변화 없음</span>
+                <span className="ml-auto flex gap-1">
+                  <form action={staleAction.bind(null, p.id, "done")}>
+                    <Button type="submit" size="sm" variant="outline" className="h-6 px-2 text-xs">
+                      완료로
+                    </Button>
+                  </form>
+                  <form action={staleAction.bind(null, p.id, "on_hold")}>
+                    <Button type="submit" size="sm" variant="outline" className="h-6 px-2 text-xs">
+                      보류로
+                    </Button>
+                  </form>
+                  <form action={staleAction.bind(null, p.id, "snooze")}>
+                    <Button type="submit" size="sm" variant="ghost" className="h-6 px-2 text-xs">
+                      {staleDays}일 동안 알리지 않기
+                    </Button>
+                  </form>
+                </span>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      )}
 
       {suggestions.length > 0 && (
         <Card>

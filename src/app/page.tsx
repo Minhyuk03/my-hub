@@ -3,7 +3,7 @@ import Link from "next/link";
 import { connection } from "next/server";
 import { BookmarkBar, SiteIcon } from "@/components/home/bookmark-bar";
 import { HomeSearch } from "@/components/home/home-search";
-import { SourceIcon, SourceStatusBadge, StateBadge } from "@/components/hub-ui";
+import { SourceIcon, StateBadge } from "@/components/hub-ui";
 import { relTime, shortPath } from "@/lib/format";
 import { getDb } from "@/server/db";
 import { bookmarkBar, tiles } from "@/server/home";
@@ -20,7 +20,6 @@ import { Agenda } from "@/components/home/agenda";
 import type { CalendarSnapshot } from "@/server/calendar";
 import { runtime } from "@/server/db/schema";
 import { staleProjects } from "@/server/projects/stale";
-import { staleAction } from "@/app/projects/actions";
 import { driveExpiry } from "@/server/connectors/gdrive/client";
 
 function Panel({
@@ -33,7 +32,7 @@ function Panel({
   children: React.ReactNode;
 }) {
   return (
-    <section className="rounded-xl border bg-background/80 p-4 shadow-sm backdrop-blur">
+    <section className="h-full min-w-0 rounded-xl border bg-background/80 p-4 shadow-sm backdrop-blur">
       <div className="mb-2 flex items-center">
         <h2 className="text-sm font-semibold">{title}</h2>
         <span className="ml-auto">{action}</span>
@@ -62,13 +61,17 @@ export default async function Home() {
   const bar = bookmarkBar(db);
   const tileList = tiles(db);
   const { since14, since30 } = sinceTimes();
-  const recent = recentItems(db, since30, 12);
+  const recent = recentItems(db, since30, 7);
   const projectsActive = activeProjects(db);
   const folders = projectsActive.length ? [] : activeFolders(db, since14, 5);
   const srcs = sourcesWithStats(db);
   const stale = staleProjects(db);
   const calendar = s.calendarEnabled ? ((db.select().from(runtime).where(eq(runtime.key, "calendar")).get()?.value as CalendarSnapshot | undefined) ?? null) : null;
   const worker = workerStatus(db);
+  const offline = srcs.filter((x) => x.status === "offline").length;
+  const errors = srcs.filter((x) => x.status === "error").length;
+  const syncing = srcs.some((x) => x.status === "syncing");
+  const problem = offline + errors > 0;
   const exp = driveExpiry(s.gdriveAccount, s.gdriveTestingMode);
   const driveOffline = srcs.find((x) => x.kind === "gdrive" && x.status === "offline" && /만료|연결되어 있지/.test(x.lastError ?? ""));
   const driveNotice = driveOffline
@@ -96,7 +99,7 @@ export default async function Home() {
         )}
       </div>
 
-      {/* 홈은 화면 전체 폭을 쓴다: 위 북마크 바, 가운데 검색·타일, 오른쪽 끝에 붙은 사이드 패널 */}
+      {/* 홈은 화면 전체 폭을 쓴다: 위 북마크 바, 알림 줄, 가운데 검색·타일·카드 */}
       <div className="-my-6 mx-[calc(50%-50vw)] flex min-h-[calc(100dvh-61px)] flex-col">
         <BookmarkBar root={bar.root} groups={bar.groups} />
         {driveNotice && (
@@ -105,62 +108,71 @@ export default async function Home() {
           </a>
         )}
 
-        <div className="flex flex-1 flex-col lg:flex-row">
-          {/* 가운데: 검색 + 즐겨찾기 타일 */}
-          <section className="flex flex-1 flex-col items-center gap-8 px-4 py-8 lg:py-16 2xl:pl-[400px]">
-            <div className="text-center">
-              <h1 className="text-4xl font-semibold tracking-tight drop-shadow-sm sm:text-5xl">{s.homeTitle || "나의 허브"}</h1>
-              <p className="mt-2 text-sm text-muted-foreground">{greeting()}</p>
-            </div>
-            <HomeSearch />
-            <div className="flex w-full max-w-2xl flex-wrap justify-center gap-2">
-              {tileList.map((t) => (
-                <a
-                  key={t.id}
-                  href={t.href}
-                  title={t.subtitle}
-                  className="group flex w-24 flex-col items-center gap-2 rounded-xl p-2 text-center hover:bg-foreground/10"
-                >
-                  <span
-                    className={`relative flex size-12 items-center justify-center rounded-full shadow-sm ${t.kind === "url" ? "bg-white" : "bg-background/90"}`}
-                  >
-                    {t.kind === "url" ? (
-                      <SiteIcon url={t.href} title={t.title} size={24} />
-                    ) : t.kind === "project" ? (
-                      <FolderKanban className="size-6 text-muted-foreground" />
-                    ) : (
-                      <FolderOpen className="size-6 text-muted-foreground" />
-                    )}
-                    {t.kind === "folder" && t.sourceKind && (
-                      <span className="absolute -bottom-1 -right-1 rounded-full bg-background p-0.5">
-                        <SourceIcon kind={t.sourceKind} className="size-3" />
-                      </span>
-                    )}
-                  </span>
-                  <span className="line-clamp-2 w-full text-xs font-medium drop-shadow-sm">
-                    {t.title}
-                  </span>
-                  {t.warning && (
-                    <span className="text-[10px] text-destructive">
-                      {t.warning}
+        {/* 알림 줄: 소스 상태·쉬는 프로젝트를 작게. 문제가 있을 때만 색으로 눈에 띄게 */}
+        <div className="flex flex-wrap items-center justify-center gap-2 px-4 pt-4 text-xs">
+          <Link
+            href="/status"
+            className={`flex items-center gap-1.5 rounded-full border bg-background/70 px-3 py-1 backdrop-blur hover:bg-background ${problem ? "border-amber-500/60 text-amber-700 dark:text-amber-400" : "text-muted-foreground"}`}
+          >
+            <span className={`size-1.5 rounded-full ${!worker.alive ? "bg-destructive" : problem ? "bg-amber-500" : syncing ? "bg-sky-500" : "bg-emerald-500"}`} />
+            {!worker.alive
+              ? "인덱서 멈춤"
+              : problem
+                ? `소스 ${srcs.length}개 중 ${[offline && `오프라인 ${offline}`, errors && `오류 ${errors}`].filter(Boolean).join(" · ")}`
+                : syncing
+                  ? `동기화 중 · 소스 ${srcs.length}개`
+                  : `소스 ${srcs.length}개 모두 정상`}
+          </Link>
+          {stale.length > 0 && (
+            <Link href="/projects#stale" className="flex items-center gap-1.5 rounded-full border bg-background/70 px-3 py-1 text-muted-foreground backdrop-blur hover:bg-background">
+              <span className="size-1.5 rounded-full bg-amber-500" />
+              쉬고 있는 프로젝트 {stale.length}개
+            </Link>
+          )}
+        </div>
+
+        {/* 가운데: 제목·검색·즐겨찾기, 그 아래 카드 */}
+        <section className="mx-auto flex w-full max-w-6xl flex-1 flex-col items-center gap-8 px-4 pb-10 pt-6 lg:pt-12">
+          <div className="text-center">
+            <h1 className="text-4xl font-semibold tracking-tight drop-shadow-sm sm:text-5xl">{s.homeTitle || "나의 허브"}</h1>
+            <p className="mt-2 text-sm text-muted-foreground">{greeting()}</p>
+          </div>
+          <HomeSearch />
+          <div className="flex w-full max-w-3xl flex-wrap justify-center gap-2">
+            {tileList.map((t) => (
+              <a
+                key={t.id}
+                href={t.href}
+                title={t.subtitle}
+                className="group flex w-24 flex-col items-center gap-2 rounded-xl p-2 text-center hover:bg-foreground/10"
+              >
+                <span className={`relative flex size-12 items-center justify-center rounded-full shadow-sm ${t.kind === "url" ? "bg-white" : "bg-background/90"}`}>
+                  {t.kind === "url" ? (
+                    <SiteIcon url={t.href} title={t.title} size={24} />
+                  ) : t.kind === "project" ? (
+                    <FolderKanban className="size-6 text-muted-foreground" />
+                  ) : (
+                    <FolderOpen className="size-6 text-muted-foreground" />
+                  )}
+                  {t.kind === "folder" && t.sourceKind && (
+                    <span className="absolute -bottom-1 -right-1 rounded-full bg-background p-0.5">
+                      <SourceIcon kind={t.sourceKind} className="size-3" />
                     </span>
                   )}
-                </a>
-              ))}
-              <Link
-                href="/home/edit#tiles"
-                className="flex w-24 flex-col items-center gap-2 rounded-xl p-2 text-center hover:bg-foreground/10"
-              >
-                <span className="flex size-12 items-center justify-center rounded-full bg-background/90 shadow-sm">
-                  <Plus className="size-5 text-muted-foreground" />
                 </span>
-                <span className="text-xs font-medium">즐겨찾기 추가</span>
-              </Link>
-            </div>
-          </section>
+                <span className="line-clamp-2 w-full text-xs font-medium drop-shadow-sm">{t.title}</span>
+                {t.warning && <span className="text-[10px] text-destructive">{t.warning}</span>}
+              </a>
+            ))}
+            <Link href="/home/edit#tiles" className="flex w-24 flex-col items-center gap-2 rounded-xl p-2 text-center hover:bg-foreground/10">
+              <span className="flex size-12 items-center justify-center rounded-full bg-background/90 shadow-sm">
+                <Plus className="size-5 text-muted-foreground" />
+              </span>
+              <span className="text-xs font-medium">즐겨찾기 추가</span>
+            </Link>
+          </div>
 
-          {/* 사이드: 이어서 작업하기, 최근 수정, 소스 상태 */}
-          <aside className="space-y-4 border-t border-foreground/10 bg-background/60 p-4 backdrop-blur lg:w-[360px] lg:shrink-0 lg:border-l lg:border-t-0 xl:w-[400px]">
+          <div className={`grid w-full grid-cols-1 items-stretch gap-4 md:grid-cols-2 ${s.calendarEnabled ? "xl:grid-cols-3" : ""}`}>
             {s.calendarEnabled && (
               <Panel title="일정">
                 <Agenda snap={calendar} hidden={s.calendarHidden} />
@@ -169,21 +181,14 @@ export default async function Home() {
             <Panel
               title="이어서 작업하기"
               action={
-                <Link
-                  href="/projects"
-                  className="text-xs text-muted-foreground hover:underline"
-                >
+                <Link href="/projects" className="text-xs text-muted-foreground hover:underline">
                   프로젝트
                 </Link>
               }
             >
               <div className="space-y-2">
                 {projectsActive.map((p) => (
-                  <Link
-                    key={p.id}
-                    href={`/projects/${p.id}`}
-                    className="block text-sm hover:underline"
-                  >
+                  <Link key={p.id} href={`/projects/${p.id}`} className="block text-sm hover:underline">
                     <div className="flex gap-2">
                       <span className="truncate font-medium">{p.name}</span>
                       <span className="ml-auto shrink-0 text-xs text-muted-foreground">
@@ -193,11 +198,7 @@ export default async function Home() {
                   </Link>
                 ))}
                 {folders.map((f) => (
-                  <Link
-                    key={f.folderId}
-                    href={`/folders/${f.folderId}`}
-                    className="block text-sm hover:underline"
-                  >
+                  <Link key={f.folderId} href={`/folders/${f.folderId}`} className="block text-sm hover:underline">
                     <div className="flex gap-2">
                       <span className="truncate font-medium">{f.name}</span>
                       <span className="ml-auto shrink-0 text-xs text-muted-foreground">
@@ -206,57 +207,13 @@ export default async function Home() {
                     </div>
                   </Link>
                 ))}
-                {!projectsActive.length && !folders.length && (
-                  <p className="text-sm text-muted-foreground">
-                    최근 2주 동안 활동이 없습니다.
-                  </p>
-                )}
+                {!projectsActive.length && !folders.length && <p className="text-sm text-muted-foreground">최근 2주 동안 활동이 없습니다.</p>}
               </div>
             </Panel>
-
-            {stale.length > 0 && (
-              <Panel
-                title="쉬고 있는 프로젝트"
-                action={
-                  <Link href="/projects" className="text-xs text-muted-foreground hover:underline">
-                    {stale.length}개 · 프로젝트에서 정리
-                  </Link>
-                }
-              >
-                <ul className="space-y-2">
-                  {stale.slice(0, 4).map((p) => (
-                    <li key={p.id} className="text-sm">
-                      <div className="flex gap-2">
-                        <Link href={`/projects/${p.id}`} className="truncate font-medium hover:underline">
-                          {p.name}
-                        </Link>
-                        <span className="ml-auto shrink-0 text-xs text-muted-foreground">{p.idleDays}일째 변화 없음</span>
-                      </div>
-                      <div className="mt-0.5 flex gap-2 text-xs">
-                        <form action={staleAction.bind(null, p.id, "on_hold")}>
-                          <button className="text-muted-foreground hover:text-foreground hover:underline">보류로</button>
-                        </form>
-                        <form action={staleAction.bind(null, p.id, "done")}>
-                          <button className="text-muted-foreground hover:text-foreground hover:underline">완료로</button>
-                        </form>
-                        <form action={staleAction.bind(null, p.id, "snooze")}>
-                          <button className="text-muted-foreground hover:text-foreground hover:underline">{s.staleProjectDays}일 동안 알리지 않기</button>
-                        </form>
-                      </div>
-                    </li>
-                  ))}
-                  {stale.length > 4 && <li className="text-xs text-muted-foreground">외 {stale.length - 4}개</li>}
-                </ul>
-              </Panel>
-            )}
-
             <Panel
               title="최근 수정"
               action={
-                <Link
-                  href="/recent"
-                  className="text-xs text-muted-foreground hover:underline"
-                >
+                <Link href="/recent" className="text-xs text-muted-foreground hover:underline">
                   전체 보기
                 </Link>
               }
@@ -264,74 +221,27 @@ export default async function Home() {
               <ul className="space-y-1">
                 {recent.map((i) => (
                   <li key={i.id}>
-                    <Link
-                      href={`/items/${i.id}`}
-                      className="flex items-center gap-2 rounded px-1 py-0.5 text-sm hover:bg-muted"
-                      title={shortPath(i.path)}
-                    >
+                    <Link href={`/items/${i.id}`} className="flex items-center gap-2 rounded px-1 py-0.5 text-sm hover:bg-muted" title={shortPath(i.path)}>
                       <SourceIcon kind={i.sourceKind} className="size-3.5" />
                       <span className="truncate">{i.title}</span>
-                      <StateBadge
-                        state={i.state}
-                        sourceStatus={i.sourceStatus}
-                      />
-                      <span className="ml-auto shrink-0 text-xs text-muted-foreground">
-                        {relTime(i.modifiedAt)}
-                      </span>
+                      <StateBadge state={i.state} sourceStatus={i.sourceStatus} />
+                      <span className="ml-auto shrink-0 text-xs text-muted-foreground">{relTime(i.modifiedAt)}</span>
                     </Link>
                   </li>
                 ))}
-                {!recent.length && (
-                  <li className="text-sm text-muted-foreground">
-                    최근 30일 안에 수정된 항목이 없습니다.
-                  </li>
-                )}
+                {!recent.length && <li className="text-sm text-muted-foreground">최근 30일 안에 수정된 항목이 없습니다.</li>}
               </ul>
             </Panel>
-
-            <Panel
-              title="소스 상태"
-              action={
-                <span
-                  className={
-                    worker.alive
-                      ? "text-xs text-muted-foreground"
-                      : "text-xs text-destructive"
-                  }
-                >
-                  인덱서 {worker.alive ? "실행 중" : "멈춤"}
-                </span>
-              }
-            >
-              <div className="space-y-1.5">
-                {srcs.map((src) => (
-                  <Link
-                    key={src.id}
-                    href="/status"
-                    className="flex items-center gap-2 text-sm hover:underline"
-                  >
-                    <SourceIcon kind={src.kind} />
-                    <span className="truncate">{src.name}</span>
-                    <span className="ml-auto flex shrink-0 items-center gap-2">
-                      <span className="text-xs text-muted-foreground">
-                        {src.total.toLocaleString()}
-                      </span>
-                      <SourceStatusBadge status={src.status} />
-                    </span>
-                  </Link>
-                ))}
-                {!srcs.length && (
-                  <p className="text-sm text-muted-foreground">
-                    연결된 소스가 없습니다.{" "}
-                    <Link href="/settings" className="underline">
-                      설정
-                    </Link>
-                  </p>
-                )}
-              </div>
-            </Panel>
-          </aside>
-        </div>
+          </div>
+          {!srcs.length && (
+            <p className="text-sm text-muted-foreground">
+              연결된 소스가 없습니다.{" "}
+              <Link href="/settings" className="underline">
+                설정
+              </Link>
+            </p>
+          )}
+        </section>
       </div>
     </>
   );
