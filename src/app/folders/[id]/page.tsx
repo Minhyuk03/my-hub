@@ -58,7 +58,12 @@ export default async function FolderPage({ params }: PageProps<"/folders/[id]">)
             ← {parent.name}
           </Link>
         )}
-        {local && s.kind !== "gdrive" && <FinderButton id={f.id} />}
+        {local && s.kind !== "gdrive" && s.kind !== "notion" && <FinderButton id={f.id} />}
+        {s.kind === "notion" && f.externalId && (
+          <a href={`https://www.notion.so/${f.externalId}`} target="_blank" rel="noreferrer" className="text-sm underline">
+            Notion에서 열기
+          </a>
+        )}
         {s.kind === "gdrive" && f.externalId && (
           <a href={folderUrl(f.externalId)} target="_blank" rel="noreferrer" className="text-sm underline">
             Google Drive에서 열기

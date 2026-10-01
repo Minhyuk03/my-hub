@@ -6,6 +6,7 @@ export const SOURCE_KIND_LABEL: Record<string, string> = {
   obsidian: "Obsidian",
   local: "내장 디스크",
   gdrive: "Google Drive",
+  notion: "Notion",
 };
 
 export const SOURCE_STATUS_LABEL: Record<string, string> = {

@@ -9,13 +9,14 @@
  * 삭제 판단: 전체 확인(full scan)이 끝까지 성공했을 때, 또는 Drive 변경 목록이 "삭제/휴지통"을 알려 줬을 때만.
  * 토큰 만료·네트워크 끊김은 오프라인으로 표시하고 아무것도 지우지 않는다.
  */
-import { and, eq, gt, inArray, lt, ne, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import type { Db } from "../../db";
 import { folders, items, scanJobs, sources } from "../../db/schema";
 import { extractText, isExtractable, kindOf } from "../../extract";
-import { removeItemText, writeItemText } from "../../search/index-writer";
+import { writeItemText } from "../../search/index-writer";
 import { getSettings, type Settings } from "../../settings";
 import { finalizeDeletions, purgeExcluded, recordError } from "../../sync/scanner";
+import { cloudPathLabel, markDeletedByExternal, patchSourceConfig, seg, upsertCloudFolder } from "../common";
 import { isExcludedName } from "../../sources/rules";
 import { EXPORTS, FOLDER_MIME, SHORTCUT_MIME, TokenError, type DriveClient, type DriveFile } from "./client";
 
@@ -24,17 +25,13 @@ export type DriveConfig = { folderId: string; folderName?: string; pageToken?: s
 export type DriveSyncDeps = { client: DriveClient; now: () => number; shouldAbort?: () => boolean };
 
 export const driveRoot = (folderId: string) => `gdrive:/${folderId}`;
-const seg = (name: string, id: string) => `${name.normalize("NFC").replace(/\//g, "／").replace(/#/g, "＃")}#${id}`;
 /** 화면·검색용 경로: ID 조각을 뺀다 → "Google Drive/블로그 리뉴얼/기획서" */
-export const drivePathLabel = (p: string) => p.replace(/^gdrive:\/[^/]+/, "Google Drive").replace(/#[A-Za-z0-9_-]+/g, "");
+export const drivePathLabel = cloudPathLabel;
 
 const cfgOf = (src: Source) => (src.config ?? {}) as DriveConfig;
 const ts = (iso?: string) => (iso ? Date.parse(iso) : null);
 
-function setConfig(db: Db, src: Source, patch: Partial<DriveConfig>) {
-  const cur = db.select({ config: sources.config }).from(sources).where(eq(sources.id, src.id)).get()?.config ?? {};
-  db.update(sources).set({ config: { ...cur, ...patch } }).where(eq(sources.id, src.id)).run();
-}
+const setConfig = (db: Db, src: Source, patch: Partial<DriveConfig>) => patchSourceConfig(db, src.id, patch);
 
 class OfflineError extends Error {}
 
@@ -43,34 +40,6 @@ function classify(e: unknown): { status: "offline" | "error"; message: string } 
   const msg = e instanceof Error ? e.message : String(e);
   if (/fetch failed|ENOTFOUND|ECONNRESET|ETIMEDOUT|EAI_AGAIN|network/i.test(msg)) return { status: "offline", message: "네트워크에 연결할 수 없습니다." };
   return { status: "error", message: msg };
-}
-
-// ---------- 폴더 ----------
-/** 폴더를 ID 기준으로 저장한다. 경로가 바뀌었으면(이동·이름 변경) 아래 항목 경로도 함께 고친다. */
-export function upsertDriveFolder(db: Db, src: Source, id: string, name: string, path: string, modifiedAt: number | null, jobId: number | null): number {
-  const existing = db.select().from(folders).where(and(eq(folders.sourceId, src.id), eq(folders.externalId, id))).get();
-  const patch = { name: name.normalize("NFC"), state: "ok" as const, modifiedAt, deletedDetectedAt: null, ...(jobId ? { seenScanId: jobId } : {}) };
-  if (existing) {
-    if (existing.path !== path) rewritePrefix(db, existing.path, path);
-    db.update(folders).set({ ...patch, path }).where(eq(folders.id, existing.id)).run();
-    return existing.id;
-  }
-  return db.insert(folders).values({ ...patch, sourceId: src.id, path, externalId: id }).returning({ id: folders.id }).get().id;
-}
-
-/** "old/..." 경로를 "new/..." 로 일괄 변경 (폴더·항목·검색용 경로) */
-function rewritePrefix(db: Db, oldPath: string, newPath: string) {
-  const lo = oldPath + "/";
-  const hi = oldPath + "0";
-  const c = db.$client;
-  const movedItems = db.select({ id: items.id, path: items.path, title: items.title }).from(items).where(and(gt(items.path, lo), lt(items.path, hi))).all();
-  c.prepare(`UPDATE folders SET path = ? || substr(path, ?) WHERE path > ? AND path < ?`).run(newPath, oldPath.length + 1, lo, hi);
-  c.prepare(`UPDATE items SET path = ? || substr(path, ?) WHERE path > ? AND path < ?`).run(newPath, oldPath.length + 1, lo, hi);
-  for (const it of movedItems) {
-    const np = newPath + it.path.slice(oldPath.length);
-    const body = (c.prepare(`SELECT body FROM item_text WHERE item_id = ?`).pluck().get(it.id) as string | undefined) ?? "";
-    writeItemText(db, it.id, { title: it.title, path: drivePathLabel(np), body });
-  }
 }
 
 // ---------- 파일 ----------
@@ -176,7 +145,7 @@ async function scanFolder(db: Db, src: Source, d: DriveSyncDeps, folder: { id: s
       if (isExcludedName(f.name, settings.excludedPatterns)) continue; // 숨김 파일(.DS_Store 등)·제외 이름
       if (f.mimeType === FOLDER_MIME) {
         const p = `${folder.path}/${seg(f.name, f.id)}`;
-        subs.push({ id: f.id, path: p, rowId: upsertDriveFolder(db, src, f.id, f.name, p, ts(f.modifiedTime), jobId) });
+        subs.push({ id: f.id, path: p, rowId: upsertCloudFolder(db, src, f.id, f.name, p, ts(f.modifiedTime), jobId) });
       } else files.push(f);
     }
     pageToken = page.nextPageToken;
@@ -220,7 +189,7 @@ export async function runDriveScan(db: Db, sourceId: number, d: DriveSyncDeps): 
     .from(scanJobs)
     .where(and(eq(scanJobs.sourceId, src.id), eq(scanJobs.scopePath, src.rootPath), inArray(scanJobs.result, ["running", "aborted"])))
     .get();
-  const rootRowId = upsertDriveFolder(db, src, cfg.folderId, rootInfo.name, src.rootPath, ts(rootInfo.modifiedTime), null);
+  const rootRowId = upsertCloudFolder(db, src, cfg.folderId, rootInfo.name, src.rootPath, ts(rootInfo.modifiedTime), null);
   if (!job) {
     const prev = db
       .select({ processed: scanJobs.processed })
@@ -278,29 +247,6 @@ export async function runDriveScan(db: Db, sourceId: number, d: DriveSyncDeps): 
 }
 
 // ---------- 변경 반영 ----------
-function markDeleted(db: Db, src: Source, externalId: string, now: number): number {
-  let n = 0;
-  const it = db.select().from(items).where(and(eq(items.sourceId, src.id), eq(items.externalId, externalId))).get();
-  if (it && it.state !== "deleted") {
-    db.update(items).set({ state: "deleted", deletedDetectedAt: now }).where(eq(items.id, it.id)).run();
-    removeItemText(db, it.id);
-    n++;
-  }
-  const f = db.select().from(folders).where(and(eq(folders.sourceId, src.id), eq(folders.externalId, externalId))).get();
-  if (f && f.state !== "deleted") {
-    db.update(folders).set({ state: "deleted", deletedDetectedAt: now }).where(eq(folders.id, f.id)).run();
-    const lo = f.path + "/";
-    const hi = f.path + "0";
-    for (const c of db.select({ id: items.id }).from(items).where(and(eq(items.sourceId, src.id), gt(items.path, lo), lt(items.path, hi), ne(items.state, "deleted"))).all()) {
-      db.update(items).set({ state: "deleted", deletedDetectedAt: now }).where(eq(items.id, c.id)).run();
-      removeItemText(db, c.id);
-      n++;
-    }
-    db.update(folders).set({ state: "deleted", deletedDetectedAt: now }).where(and(eq(folders.sourceId, src.id), gt(folders.path, lo), lt(folders.path, hi))).run();
-  }
-  return n;
-}
-
 /** Drive 변경 목록으로 바뀐 것만 반영한다 */
 export async function runDriveChanges(db: Db, sourceId: number, d: DriveSyncDeps): Promise<{ result: "ok" | "offline" | "error" | "skipped"; changed?: number; message?: string }> {
   const src = db.select().from(sources).where(eq(sources.id, sourceId)).get();
@@ -317,7 +263,7 @@ export async function runDriveChanges(db: Db, sourceId: number, d: DriveSyncDeps
         const now = d.now();
         const f = ch.file;
         if (ch.removed || !f || f.trashed) {
-          changed += markDeleted(db, src, ch.fileId, now);
+          changed += markDeletedByExternal(db, src.id, ch.fileId, now);
           continue;
         }
         if (f.mimeType === SHORTCUT_MIME) continue;
@@ -333,13 +279,13 @@ export async function runDriveChanges(db: Db, sourceId: number, d: DriveSyncDeps
           : undefined;
         if (f.id === cfg.folderId) continue; // 루트 폴더 자체의 이름 변경 등은 전체 확인 때 반영
         if (!parent) {
-          changed += markDeleted(db, src, f.id, now);
+          changed += markDeletedByExternal(db, src.id, f.id, now);
           continue;
         }
         if (f.mimeType === FOLDER_MIME) {
           const p = `${parent.path}/${seg(f.name, f.id)}`;
           const isNew = !db.select().from(folders).where(and(eq(folders.sourceId, src.id), eq(folders.externalId, f.id), eq(folders.state, "ok"))).get();
-          const rowId = upsertDriveFolder(db, src, f.id, f.name, p, ts(f.modifiedTime), null);
+          const rowId = upsertCloudFolder(db, src, f.id, f.name, p, ts(f.modifiedTime), null);
           // 다른 곳에서 옮겨 온 폴더는 안의 내용을 따로 알려 주지 않으므로 직접 훑는다
           if (isNew) {
             const stack = [{ id: f.id, path: p, rowId }];

@@ -71,6 +71,7 @@ function waitingPage(title: string) {
 /** Google Drive 항목: Drive 에서 받아 그대로 흘려보낸다. Google 문서류는 PDF 로 변환 */
 async function driveFile(id: number, download: boolean): Promise<Response | null> {
   const it = getItem(getDb(), id);
+  if (it?.source.kind === "notion") return new Response("Notion 페이지는 'Notion에서 열기'로 여세요.", { status: 404, headers: { "Content-Type": "text/plain; charset=utf-8" } });
   if (!it || it.source.kind !== "gdrive") return null;
   if (it.item.state === "deleted") return new Response("삭제된 항목입니다.", { status: 410 });
   if (!it.item.externalId) return new Response("원본 ID가 없습니다.", { status: 404 });

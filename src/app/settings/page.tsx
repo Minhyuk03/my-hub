@@ -13,6 +13,8 @@ import { ConfirmSubmit } from "./confirm-submit";
 import { FolderPicker } from "./folder-picker";
 import { PasscodeForm } from "./passcode-form";
 import { DrivePicker } from "./drive-picker";
+import { NotionRootForm } from "./notion-form";
+import { notionWhoAmI } from "./notion-actions";
 import { disconnectDrive, setDriveTestingMode } from "./drive-actions";
 import { driveEnv, driveExpiry } from "@/server/connectors/gdrive/client";
 import { saveAllowlist } from "./security-actions";
@@ -41,6 +43,9 @@ export default async function SettingsPage({ searchParams }: PageProps<"/setting
   const driveMsg = (await searchParams).gdrive;
   const denv = driveEnv();
   const dexp = driveExpiry(s.gdriveAccount, s.gdriveTestingMode);
+  const notionToken = !!process.env.NOTION_TOKEN;
+  const notionWho = notionToken ? await notionWhoAmI() : "";
+  const notionSources = srcs.filter((x) => x.kind === "notion");
   const local = isLocalRequest(await headers());
   const ts = local ? tailscaleSelf() : null;
   const serve = local ? tailscaleServeStatus() : "";
@@ -162,6 +167,29 @@ export default async function SettingsPage({ searchParams }: PageProps<"/setting
             </a>
           ) : (
             <p className="text-muted-foreground">연결은 Mac mini에서 직접 접속해 진행하세요.</p>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card id="notion">
+        <CardHeader>
+          <CardTitle>Notion</CardTitle>
+          <CardDescription>내부 통합(읽기 전용)으로 연결합니다. 고른 페이지와 그 아래 하위 페이지·데이터베이스를 가져오고, 원본은 Notion 에서 열립니다.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3 text-sm">
+          {!notionToken ? (
+            <p className="text-destructive">.env.local 에 NOTION_TOKEN 이 필요합니다. (넣은 뒤 허브를 다시 시작)</p>
+          ) : (
+            <>
+              <p>{notionWho}</p>
+              {notionSources.map((n) => (
+                <p key={n.id} className="text-muted-foreground">
+                  가져오는 중인 페이지: <b className="text-foreground">{n.name}</b> · 항목 {n.total.toLocaleString()}개
+                </p>
+              ))}
+              <NotionRootForm defaultPage={notionSources.length ? "" : "https://app.notion.com/p/4-3e3533f6b13580518794cd78560ee63c"} />
+              <p className="text-xs text-muted-foreground">가져올 페이지는 Notion 에서 ⋯ → 연결(Connections) → 이 통합을 추가해야 보입니다. 하위 페이지는 자동으로 함께 공유됩니다.</p>
+            </>
           )}
         </CardContent>
       </Card>

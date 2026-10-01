@@ -21,6 +21,8 @@ import { processFile, purgeExcluded, realDeps, reindexItems, retryDue, runScan }
 import { DriveClient, driveEnv } from "@/server/connectors/gdrive/client";
 import { runDriveChanges, runDriveScan } from "@/server/connectors/gdrive/sync";
 import { keychainStore } from "@/server/connectors/gdrive/tokens";
+import { NotionClient } from "@/server/connectors/notion/client";
+import { runNotionChanges, runNotionScan } from "@/server/connectors/notion/sync";
 import { loadEnvLocal } from "@/server/env";
 import { Ollama, realOllama } from "@/server/ai/ollama";
 import { runAiBatch } from "@/server/ai/pipeline";
@@ -40,6 +42,15 @@ function drive() {
   return driveClient;
 }
 const isDrive = (s: { kind: string }) => s.kind === "gdrive";
+const isNotion = (s: { kind: string }) => s.kind === "notion";
+/** 클라우드 소스: 파일 감시 대신 변경 목록을 주기적으로 확인 */
+const isCloud = (s: { kind: string }) => isDrive(s) || isNotion(s);
+const NOTION_CHANGES_MS = 10 * 60_000;
+let notionClient: NotionClient | null = null;
+function notion() {
+  if (!notionClient) notionClient = new NotionClient({ fetch, token: process.env.NOTION_TOKEN ?? "" });
+  return notionClient;
+}
 
 type Task = { sourceId: number; scope?: string; kind?: "changes" };
 const queue: Task[] = [];
@@ -66,7 +77,15 @@ async function runQueue() {
   if (current || !queue.length || stopping) return;
   current = queue.shift()!;
   const src = db.select().from(sources).where(eq(sources.id, current.sourceId)).get();
-  if (src?.enabled && isDrive(src) && current.kind === "changes") {
+  if (src?.enabled && isNotion(src) && current.kind === "changes") {
+    const r = await runNotionChanges(db, src.id, { client: notion(), now: Date.now });
+    if (r.result !== "skipped" && (r.result !== "ok" || r.changed)) log("Notion 변경 반영", src.name, r.result, r.changed ?? "", r.message ?? "");
+  } else if (src?.enabled && isNotion(src)) {
+    log("스캔 시작", src.name, "(Notion 전체)");
+    const r = await runNotionScan(db, src.id, { client: notion(), now: Date.now, shouldAbort: () => stopping });
+    log("스캔 종료", src.name, r.result, r.message ?? "", r.deleted ? `삭제 ${r.deleted}` : "");
+    if (r.result === "ok") updateSuggestions();
+  } else if (src?.enabled && isDrive(src) && current.kind === "changes") {
     const r = await runDriveChanges(db, src.id, { client: drive(), now: Date.now });
     if (r.result !== "skipped" && (r.result !== "ok" || r.changed)) log("Drive 변경 반영", src.name, r.result, r.changed ?? "", r.message ?? "");
   } else if (src?.enabled && isDrive(src)) {
@@ -164,11 +183,11 @@ async function stopWatcher(id: number) {
 async function checkSources() {
   const settings = getSettings(db);
   for (const src of db.select().from(sources).where(eq(sources.enabled, true)).all()) {
-    if (isDrive(src)) {
-      // Google Drive: 파일 감시 대신 변경 목록을 주기적으로 확인한다. 연결 상태는 API 호출 결과로 정해진다.
+    if (isCloud(src)) {
+      // Google Drive·Notion: 파일 감시 대신 변경 목록을 주기적으로 확인한다. 연결 상태는 API 호출 결과로 정해진다.
       const due = !src.lastFullScanAt || Date.now() - src.lastFullScanAt > settings.fullScanIntervalHours * 3600_000;
       if (due && src.status !== "syncing") enqueueScan({ sourceId: src.id });
-      else if (Date.now() - (lastDriveChanges.get(src.id) ?? 0) > DRIVE_CHANGES_MS) {
+      else if (Date.now() - (lastDriveChanges.get(src.id) ?? 0) > (isNotion(src) ? NOTION_CHANGES_MS : DRIVE_CHANGES_MS)) {
         lastDriveChanges.set(src.id, Date.now());
         enqueueScan({ sourceId: src.id, kind: "changes" });
       }

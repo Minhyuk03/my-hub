@@ -366,7 +366,7 @@ export function titleOf(p: string): string {
   return base.toLowerCase().endsWith(".md") ? base.slice(0, -3) : base;
 }
 
-function replaceTags(db: Db, itemId: number, names: string[]) {
+export function replaceTags(db: Db, itemId: number, names: string[]) {
   db.delete(itemTags).where(eq(itemTags.itemId, itemId)).run();
   for (const n of names) {
     db.insert(tags).values({ name: n }).onConflictDoNothing().run();

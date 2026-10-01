@@ -78,13 +78,14 @@ export function membershipSql(db: Db, projectId: number): { sql: string; params:
   const parts: string[] = [];
   const params: unknown[] = [];
   for (const l of links) {
+    // Notion 페이지처럼 "폴더이면서 문서"인 경우, 폴더와 같은 경로의 항목(페이지 본문)도 포함한다
     if (l.inc) {
       // 경로 범위 비교: "폴더/" 로 시작하는 모든 경로 ('/' 다음 문자가 '0')
-      parts.push(`SELECT id FROM items WHERE path > ? AND path < ?`);
-      params.push(l.path + "/", l.path + "0");
+      parts.push(`SELECT id FROM items WHERE (path > ? AND path < ?) OR path = ?`);
+      params.push(l.path + "/", l.path + "0", l.path);
     } else {
-      parts.push(`SELECT id FROM items WHERE folder_id = ?`);
-      params.push(l.id);
+      parts.push(`SELECT id FROM items WHERE folder_id = ? OR path = ?`);
+      params.push(l.id, l.path);
     }
   }
   parts.push(`SELECT item_id AS id FROM project_items WHERE project_id = ? AND mode = 'include'`);

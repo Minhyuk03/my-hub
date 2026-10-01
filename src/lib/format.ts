@@ -31,6 +31,7 @@ export function bytes(n: number | null | undefined): string {
 export function shortPath(p: string): string {
   // Google Drive: "gdrive:/<루트ID>/폴더#ID/파일#ID" → "Google Drive/폴더/파일"
   if (p.startsWith("gdrive:/")) return p.replace(/^gdrive:\/[^/]+/, "Google Drive").replace(/#[A-Za-z0-9_-]+/g, "");
+  if (p.startsWith("notion:/")) return p.replace(/^notion:\/[^/]+/, "Notion").replace(/#[A-Za-z0-9_-]+/g, "");
   return p
     .normalize("NFC")
     .replace(/^\/Users\/[^/]+\/Library\/Mobile Documents\/iCloud~md~obsidian\/Documents/, "Obsidian")
