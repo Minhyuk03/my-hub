@@ -31,3 +31,13 @@ export async function savePasscode(_: unknown, form: FormData): Promise<{ ok: bo
   setSetting(getDb(), "passcodeHash", hashPasscode(a));
   return { ok: true, message: "패스코드를 저장했습니다. 다른 기기는 다음 접속 때 한 번 입력합니다." };
 }
+
+/** Mac mini 본인 접속에도 패스코드 요구 (패스코드가 있어야 켤 수 있다) */
+export async function setRequireLocalPasscode(on: boolean) {
+  await assertLocal();
+  const db = getDb();
+  const { getSettings } = await import("@/server/settings");
+  if (on && !getSettings(db).passcodeHash) throw new Error("먼저 앱 패스코드를 정하세요.");
+  setSetting(db, "requireLocalPasscode", on);
+  refresh();
+}

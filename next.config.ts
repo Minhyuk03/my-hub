@@ -1,6 +1,8 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  // "X-Powered-By: Next.js" 를 붙이지 않는다
+  poweredByHeader: false,
   // 네이티브 확장(.dylib)을 불러오므로 번들하지 않는다
   serverExternalPackages: ["sqlite-vec", "better-sqlite3"],
   experimental: {

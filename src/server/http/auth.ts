@@ -11,10 +11,19 @@ import crypto from "node:crypto";
 export type Listener = "local" | "tailscale";
 export const LISTENER_HEADER = "x-hub-listener";
 export const SESSION_COOKIE = "hub_session";
+/** Mac mini 본인 접속용 세션 (http://127.0.0.1 이라 Secure 를 붙이지 않는다) */
+export const LOCAL_SESSION_COOKIE = "hub_local";
+export const LOCAL_LOGIN = "local@mac-mini";
 export const SESSION_DAYS = 90;
 export const TAILSCALE_HEADERS = ["tailscale-user-login", "tailscale-user-name", "tailscale-user-profile-pic"];
 
-export type AuthConfig = { allowedLogins: string[]; passcodeHash: string; secret: string };
+export type AuthConfig = {
+  allowedLogins: string[];
+  passcodeHash: string;
+  secret: string;
+  /** Mac mini 본인 접속에도 패스코드 요구 (같은 Mac 의 다른 프로그램·다른 계정 차단). 패스코드가 없으면 적용하지 않는다 */
+  requireLocalPasscode?: boolean;
+};
 export type Decision =
   | { action: "allow"; login?: string }
   | { action: "deny"; status: number; message: string }
@@ -29,7 +38,13 @@ export function sanitizeHeaders(headers: Record<string, string | string[] | unde
 
 /** 모든 요청에 대한 판단 */
 export function decide(listener: Listener, headers: Record<string, string | string[] | undefined>, path: string, cfg: AuthConfig, now = Date.now()): Decision {
-  if (listener === "local") return { action: "allow" };
+  if (listener === "local") {
+    if (!cfg.requireLocalPasscode || !cfg.passcodeHash) return { action: "allow" };
+    if (path === "/unlock") return { action: "unlock", login: LOCAL_LOGIN };
+    const c = parseCookies(first(headers.cookie) ?? "")[LOCAL_SESSION_COOKIE];
+    if (c && verifySession(c, LOCAL_LOGIN, cfg.secret, now)) return { action: "allow", login: LOCAL_LOGIN };
+    return { action: "unlock", login: LOCAL_LOGIN };
+  }
   const login = first(headers["tailscale-user-login"]);
   if (!login) return { action: "deny", status: 403, message: "Tailscale 사용자 정보가 없습니다." };
   if (!cfg.allowedLogins.map((x) => x.toLowerCase()).includes(login.toLowerCase()))
@@ -70,8 +85,46 @@ export function verifySession(token: string, login: string, secret: string, now 
   return sig.length === expected.length && crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expected));
 }
 
-export function sessionCookie(token: string) {
+export function sessionCookie(token: string, listener: Listener = "tailscale") {
+  if (listener === "local") return `${LOCAL_SESSION_COOKIE}=${encodeURIComponent(token)}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${SESSION_DAYS * 86400}`;
   return `${SESSION_COOKIE}=${encodeURIComponent(token)}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${SESSION_DAYS * 86400}`;
+}
+
+/**
+ * 모든 응답에 붙이는 보안 헤더. 페이지의 CSP(nonce)는 src/proxy.ts 에서 따로 붙인다.
+ * 원본 파일 보기(/api/items/:id/file)는 허브 안의 미리보기(iframe)에서만 열리게 한다 (SVG 는 파일 경로가 sandbox CSP 를 따로 붙임).
+ */
+export function securityHeaders(pathname: string): Record<string, string> {
+  const file = /^\/api\/items\/\d+\/file$/.test(pathname);
+  return {
+    "X-Content-Type-Options": "nosniff",
+    "Referrer-Policy": "same-origin",
+    "X-Frame-Options": file ? "SAMEORIGIN" : "DENY",
+    "Cross-Origin-Opener-Policy": "same-origin",
+    "Permissions-Policy": "camera=(), microphone=(), geolocation=(), payment=()",
+    ...(file ? { "Content-Security-Policy": "frame-ancestors 'self'" } : {}),
+  };
+}
+
+/** 페이지 CSP: 스크립트는 이번 요청의 nonce 가 붙은 것만 (Next.js 가 자기 스크립트에 nonce 를 붙인다) */
+export function pageCsp(nonce: string, dev = false): string {
+  return [
+    "default-src 'self'",
+    `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'${dev ? " 'unsafe-eval'" : ""}`,
+    // Tailwind·그래프 등 style 속성을 쓰므로 스타일은 인라인 허용 (스크립트 실행과는 무관)
+    "style-src 'self' 'unsafe-inline'",
+    // 북마크 사이트 아이콘(favicon)은 외부 https 이미지
+    "img-src 'self' data: blob: https:",
+    "font-src 'self' data:",
+    `connect-src 'self'${dev ? " ws:" : ""}`,
+    "frame-src 'self'",
+    "worker-src 'self' blob:",
+    "manifest-src 'self'",
+    "object-src 'none'",
+    "base-uri 'self'",
+    "form-action 'self'",
+    "frame-ancestors 'none'",
+  ].join("; ");
 }
 
 // ---------- 패스코드 ----------

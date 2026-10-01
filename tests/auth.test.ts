@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { AttemptLimiter, createSession, decide, hashPasscode, LISTENER_HEADER, sanitizeHeaders, SESSION_COOKIE, verifyPasscode, verifySession } from "@/server/http/auth";
+import { AttemptLimiter, createSession, decide, hashPasscode, LISTENER_HEADER, LOCAL_LOGIN, LOCAL_SESSION_COOKIE, pageCsp, sanitizeHeaders, securityHeaders, SESSION_COOKIE, verifyPasscode, verifySession } from "@/server/http/auth";
 import { isAllowedHost, isLocalRequest, TAILSCALE_HOST } from "@/server/http/local";
 
 const ME = "me@example.com";
@@ -66,5 +66,37 @@ describe("접속·인증 (7장)", () => {
     expect(isAllowedHost(TAILSCALE_HOST, "local")).toBe(false);
     expect(isAllowedHost("127.0.0.1:3000", "tailscale")).toBe(false);
     expect(isAllowedHost("evil.example", "tailscale")).toBe(false);
+  });
+});
+
+describe("Mac mini 본인 접속 패스코드 (선택)", () => {
+  const strict = { ...cfg, requireLocalPasscode: true };
+  const local = (now = Date.now()) => `${LOCAL_SESSION_COOKIE}=${encodeURIComponent(createSession(LOCAL_LOGIN, secret, now))}`;
+  it("켜면 127.0.0.1 접속도 패스코드 세션이 있어야 한다", () => {
+    expect(decide("local", {}, "/", cfg).action).toBe("allow");
+    expect(decide("local", {}, "/", strict)).toMatchObject({ action: "unlock", login: LOCAL_LOGIN });
+    expect(decide("local", { cookie: local() }, "/", strict).action).toBe("allow");
+  });
+  it("Tailscale 세션 쿠키로는 로컬을 통과할 수 없고, 반대도 마찬가지", () => {
+    expect(decide("local", { cookie: cookie() }, "/", strict).action).toBe("unlock");
+    expect(decide("tailscale", { "tailscale-user-login": ME, cookie: local() }, "/", strict).action).toBe("unlock");
+  });
+  it("패스코드가 아직 없으면 잠그지 않는다 (잠겨서 못 들어가는 일 방지)", () => {
+    expect(decide("local", {}, "/", { ...strict, passcodeHash: "" }).action).toBe("allow");
+  });
+});
+
+describe("보안 헤더", () => {
+  it("다른 사이트가 허브를 끼워 넣지 못하게 하고, 형식 추측·Referer 유출을 막는다", () => {
+    const h = securityHeaders("/");
+    expect(h).toMatchObject({ "X-Frame-Options": "DENY", "X-Content-Type-Options": "nosniff", "Referrer-Policy": "same-origin" });
+    expect(securityHeaders("/api/items/3/file")["X-Frame-Options"]).toBe("SAMEORIGIN");
+  });
+  it("페이지 CSP: nonce 스크립트만, 끼워 넣기 금지", () => {
+    const c = pageCsp("abc");
+    expect(c).toMatch("script-src 'self' 'nonce-abc' 'strict-dynamic'");
+    expect(c).toMatch("frame-ancestors 'none'");
+    expect(c).toMatch("object-src 'none'");
+    expect(c).not.toMatch("unsafe-eval");
   });
 });

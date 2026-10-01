@@ -12,7 +12,7 @@ import crypto from "node:crypto";
 import next from "next";
 import { DATA_DIR } from "@/lib/config";
 import { openDb } from "@/server/db";
-import { AttemptLimiter, createSession, decide, sanitizeHeaders, sessionCookie, verifyPasscode, type AuthConfig, type Listener } from "@/server/http/auth";
+import { AttemptLimiter, createSession, decide, sanitizeHeaders, securityHeaders, sessionCookie, verifyPasscode, type AuthConfig, type Listener } from "@/server/http/auth";
 import { TAILSCALE_HOST } from "@/server/http/local";
 import { getSettings } from "@/server/settings";
 
@@ -36,14 +36,19 @@ let cfgCache: { at: number; cfg: AuthConfig } | null = null;
 function authConfig(): AuthConfig {
   if (!cfgCache || Date.now() - cfgCache.at > 5000) {
     const s = getSettings(db);
-    cfgCache = { at: Date.now(), cfg: { allowedLogins: s.allowedTailscaleLogins, passcodeHash: s.passcodeHash, secret } };
+    cfgCache = { at: Date.now(), cfg: { allowedLogins: s.allowedTailscaleLogins, passcodeHash: s.passcodeHash, secret, requireLocalPasscode: s.requireLocalPasscode } };
   }
   return cfgCache.cfg;
 }
 const limiter = new AttemptLimiter();
 
 function unlockPage(res: http.ServerResponse, message = "", nextPath = "/") {
-  res.writeHead(message ? 401 : 200, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" });
+  res.writeHead(message ? 401 : 200, {
+    "Content-Type": "text/html; charset=utf-8",
+    "Cache-Control": "no-store",
+    // 잠금 화면은 스크립트가 없다
+    "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'",
+  });
   const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);
   res.end(`<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>나의 허브 잠금 해제</title>
@@ -77,6 +82,7 @@ async function main() {
     http.createServer(async (req, res) => {
       sanitizeHeaders(req.headers, listener);
       const url = new URL(req.url ?? "/", "http://x");
+      for (const [k, v] of Object.entries(securityHeaders(url.pathname))) res.setHeader(k, v);
       const d = decide(listener, req.headers, url.pathname, authConfig());
       if (d.action === "deny") {
         res.writeHead(d.status, { "Content-Type": "text/plain; charset=utf-8" });
@@ -86,11 +92,16 @@ async function main() {
       if (d.action === "unlock") {
         if (url.pathname === "/unlock" && req.method === "POST") {
           const origin = req.headers.origin;
-          if (origin && origin !== `https://${TAILSCALE_HOST}`) {
+          const okOrigins = listener === "local" ? [`http://127.0.0.1:${LOCAL_PORT}`, `http://localhost:${LOCAL_PORT}`] : [`https://${TAILSCALE_HOST}`];
+          if (origin && !okOrigins.includes(origin)) {
             res.writeHead(403).end();
             return;
           }
           if (limiter.locked(d.login)) return unlockPage(res, "여러 번 틀려서 10분 동안 잠겼습니다.");
+          if (listener === "local" && !origin) {
+            res.writeHead(403).end();
+            return;
+          }
           const form = new URLSearchParams(await readBody(req).catch(() => ""));
           const nextPath = (form.get("next") ?? "/").startsWith("/") ? (form.get("next") ?? "/") : "/";
           if (!verifyPasscode(form.get("passcode") ?? "", authConfig().passcodeHash)) {
@@ -98,7 +109,7 @@ async function main() {
             return unlockPage(res, "패스코드가 맞지 않습니다.", nextPath);
           }
           limiter.success(d.login);
-          res.writeHead(303, { "Set-Cookie": sessionCookie(createSession(d.login, secret)), Location: nextPath.startsWith("//") ? "/" : nextPath });
+          res.writeHead(303, { "Set-Cookie": sessionCookie(createSession(d.login, secret), listener), Location: nextPath.startsWith("//") ? "/" : nextPath });
           res.end();
           return;
         }

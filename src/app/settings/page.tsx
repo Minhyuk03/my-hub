@@ -28,7 +28,7 @@ import { figmaWhoAmI, setFigmaFetchText } from "./figma-actions";
 import { FigmaTargetForm } from "./figma-form";
 import { disconnectDrive, setDriveTestingMode } from "./drive-actions";
 import { driveEnv, driveExpiry } from "@/server/connectors/gdrive/client";
-import { saveAllowlist } from "./security-actions";
+import { saveAllowlist, setRequireLocalPasscode } from "./security-actions";
 import { headers } from "next/headers";
 import { isLocalRequest } from "@/server/http/local";
 import { tailscaleSelf, tailscaleServeStatus } from "@/server/http/tailscale";
@@ -137,6 +137,16 @@ export default async function SettingsPage({ searchParams }: PageProps<"/setting
               {!s.allowedTailscaleLogins.length && <span className="ml-2 text-destructive">아직 저장되지 않았습니다.</span>}
             </form>
             <PasscodeForm isSet={!!s.passcodeHash} />
+            <form action={setRequireLocalPasscode.bind(null, !s.requireLocalPasscode)} className="space-y-1 border-t pt-3">
+              <p className="font-medium">Mac mini 에서 접속할 때도 패스코드 요구: {s.requireLocalPasscode ? "켜짐" : "꺼짐"}</p>
+              <p className="text-xs text-muted-foreground">
+                켜면 이 Mac 의 다른 프로그램이나 다른 사용자 계정이 허브(127.0.0.1)로 자료를 읽지 못합니다. 이 Mac 의 브라우저에서도 처음 한 번(90일마다) 패스코드를
+                넣습니다. 허브는 전체 디스크 접근 권한이 있어서, 켜 두는 것을 권합니다.
+              </p>
+              <Button type="submit" size="sm" variant="outline" disabled={!s.passcodeHash && !s.requireLocalPasscode}>
+                {s.requireLocalPasscode ? "끄기" : s.passcodeHash ? "켜기" : "먼저 패스코드를 정하세요"}
+              </Button>
+            </form>
           </CardContent>
         </Card>
       )}

@@ -22,6 +22,8 @@ export const DEFAULT_SETTINGS = {
   synonyms: DEFAULT_SYNONYMS as string[],
   /** 외부(Tailscale) 접속을 허용할 로그인 계정 */
   allowedTailscaleLogins: [] as string[],
+  /** Mac mini 본인 접속(127.0.0.1)에도 패스코드 요구 */
+  requireLocalPasscode: false as boolean,
   /** 앱 패스코드 (scrypt 해시). 비어 있으면 외부 접속 불가 */
   passcodeHash: "" as string,
   /** 홈 배경 이미지 파일 이름 (앱 데이터 폴더 안). 비어 있으면 기본 배경 */

@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next";
+import { headers } from "next/headers";
 import "./globals.css";
 import { AppHeader } from "@/components/app-header";
 
@@ -26,12 +27,14 @@ const swScript = `if("serviceWorker" in navigator)addEventListener("load",functi
 // 화면이 처음부터 다시 그려지며 <html> 클래스가 초기화돼도(React 복구 렌더링) 저장값대로 되돌린다.
 const themeScript = `(function(){try{var h=document.documentElement;var want=function(){var t=localStorage.getItem("theme");return t?t==="dark":matchMedia("(prefers-color-scheme: dark)").matches};h.classList.toggle("dark",want());new MutationObserver(function(){var w=want();if(h.classList.contains("dark")!==w)h.classList.toggle("dark",w)}).observe(h,{attributes:true,attributeFilter:["class"]})}catch(e){}})()`;
 
-export default function RootLayout({ children }: LayoutProps<"/">) {
+export default async function RootLayout({ children }: LayoutProps<"/">) {
+  // CSP 가 허용하는 이번 요청의 nonce (src/proxy.ts)
+  const nonce = (await headers()).get("x-nonce") ?? undefined;
   return (
     <html lang="ko" className="h-full antialiased" suppressHydrationWarning>
       <head>
-        <script dangerouslySetInnerHTML={{ __html: themeScript }} />
-        <script dangerouslySetInnerHTML={{ __html: swScript }} />
+        <script nonce={nonce} dangerouslySetInnerHTML={{ __html: themeScript }} />
+        <script nonce={nonce} dangerouslySetInnerHTML={{ __html: swScript }} />
       </head>
       <body className="min-h-full flex flex-col">
         <AppHeader />

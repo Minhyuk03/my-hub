@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { LISTENER_HEADER } from "@/server/http/auth";
+import { LISTENER_HEADER, pageCsp } from "@/server/http/auth";
 import { isAllowedHost } from "@/server/http/local";
 
 /**
@@ -17,7 +17,16 @@ export function proxy(request: NextRequest) {
       return new NextResponse("허용되지 않은 요청입니다.", { status: 403 });
     }
   }
-  return NextResponse.next();
+  // 페이지 CSP: 요청마다 nonce 를 만들어 Next.js(자기 스크립트)와 레이아웃(테마·서비스 워커 스크립트)이 쓰게 한다
+  const nonce = btoa(crypto.randomUUID());
+  const csp = pageCsp(nonce, process.env.NODE_ENV !== "production");
+  const reqHeaders = new Headers(request.headers);
+  reqHeaders.set("x-nonce", nonce);
+  reqHeaders.set("Content-Security-Policy", csp);
+  const res = NextResponse.next({ request: { headers: reqHeaders } });
+  // 원본 파일 응답은 서버가 따로 sandbox CSP 를 붙인다
+  if (!/^\/api\/items\/\d+\/file$/.test(request.nextUrl.pathname)) res.headers.set("Content-Security-Policy", csp);
+  return res;
 }
 
 export const config = {
