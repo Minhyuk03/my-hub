@@ -265,11 +265,17 @@ export function ChatClient({
           <div className="rounded-lg border border-dashed p-6 text-sm text-muted-foreground">
             허브에 있는 내 자료를 찾아 근거로 답합니다. 답마다 출처 번호가 붙고, 답할 때 쓴 원문도 함께 저장됩니다.
             <br />
-            Claude·ChatGPT 를 고르면 🔒 외부 전송 금지 자료는 서버가 빼고 보내며, 보낸 내용은{" "}
-            <Link href="/chat/log" className="underline">
-              외부 전송 내역
-            </Link>
-            에 남습니다.
+            {providers.length === 1 ? (
+              "지금은 로컬 전용 모드입니다. 모든 질문과 자료는 이 Mac 안에서만 처리되고 외부로 나가지 않습니다."
+            ) : (
+              <>
+                Claude·ChatGPT 를 고르면 🔒 외부 전송 금지 자료는 서버가 빼고 보내며, 보낸 내용은{" "}
+                <Link href="/chat/log" className="underline">
+                  외부 전송 내역
+                </Link>
+                에 남습니다.
+              </>
+            )}
           </div>
         )}
         {thread?.messages.map((m) => (

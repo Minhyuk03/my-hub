@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleIdentifier</key>
+	<string>com.myhub.calendar</string>
+	<key>CFBundleName</key>
+	<string>HubCalendar</string>
+	<key>CFBundleDisplayName</key>
+	<string>나의 허브 캘린더</string>
+	<key>CFBundleExecutable</key>
+	<string>HubCalendar</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>1.0</string>
+	<key>CFBundleVersion</key>
+	<string>1</string>
+	<key>LSUIElement</key>
+	<true/>
+	<key>LSMinimumSystemVersion</key>
+	<string>14.0</string>
+	<key>NSCalendarsFullAccessUsageDescription</key>
+	<string>나의 허브 홈 화면에 앞으로 며칠의 일정을 보여 주기 위해 캘린더를 읽습니다. 일정은 이 Mac 밖으로 보내지 않고 바꾸지도 않습니다.</string>
+	<key>NSCalendarsUsageDescription</key>
+	<string>나의 허브 홈 화면에 앞으로 며칠의 일정을 보여 주기 위해 캘린더를 읽습니다.</string>
+</dict>
+</plist>

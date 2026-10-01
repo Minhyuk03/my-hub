@@ -44,6 +44,14 @@ export const DEFAULT_SETTINGS = {
   aiStructuralTags: ["para", "daily", "weekly"] as string[],
   /** 1분마다 만들 의미 검색 조각 수 */
   aiChunkBudget: 192 as number,
+  /** 이 날수 넘게 파일이 바뀌지 않은 진행중 프로젝트를 홈에 알림 (0 이면 끔) */
+  staleProjectDays: 30 as number,
+  /** 프로젝트별 "알리지 않기" 끝나는 시각 */
+  staleSnooze: {} as Record<string, number>,
+  /** 홈 일정: Mac 캘린더 앱 연결 여부 (설정에서 "연결" 을 눌러야 켜진다) */
+  calendarEnabled: false as boolean,
+  /** 홈 일정: 숨길 캘린더 이름 */
+  calendarHidden: [] as string[],
   /** AI 채팅 (Phase 5) */
   /** 측정 결과(scripts/ai/bench-chat.ts): 근거 부족·출처 표시·가짜 지시 무시를 가장 잘 지킴 */
   chatLocalModel: "gemma3:4b" as string,
@@ -52,6 +60,8 @@ export const DEFAULT_SETTINGS = {
   chatOpenAiModel: "" as string,
   /** 요청 하나에 넣는 자료 글자 수 상한 (외부 모델) */
   chatMaxContextChars: 12000 as number,
+  /** 외부 AI(Claude·ChatGPT) 사용. 끄면 서버가 외부 요청을 모두 막는다 (로컬 전용) */
+  externalAiEnabled: false as boolean,
   /** 하루 외부 AI 요청 횟수 상한 */
   chatDailyExternalLimit: 100 as number,
 };

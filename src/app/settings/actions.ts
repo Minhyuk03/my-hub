@@ -130,6 +130,7 @@ export async function saveSettings(form: FormData) {
   setSetting(db, "backupHour", num("backupHour", 0, 23, s.backupHour));
   setSetting(db, "backupKeepDaily", num("backupKeepDaily", 1, 365, s.backupKeepDaily));
   setSetting(db, "backupKeepWeekly", num("backupKeepWeekly", 0, 104, s.backupKeepWeekly));
+  setSetting(db, "staleProjectDays", num("staleProjectDays", 0, 365, s.staleProjectDays));
   const editors: Record<string, string> = {};
   for (const l of lines(form.get("editorByExt"))) {
     const m = l.match(/^\.?([\w]+)\s*=\s*(.+)$/);

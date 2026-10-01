@@ -15,6 +15,12 @@ import {
   workerStatus,
 } from "@/server/queries";
 import { getSettings } from "@/server/settings";
+import { eq } from "drizzle-orm";
+import { Agenda } from "@/components/home/agenda";
+import type { CalendarSnapshot } from "@/server/calendar";
+import { runtime } from "@/server/db/schema";
+import { staleProjects } from "@/server/projects/stale";
+import { staleAction } from "@/app/projects/actions";
 import { driveExpiry } from "@/server/connectors/gdrive/client";
 
 function Panel({
@@ -60,6 +66,8 @@ export default async function Home() {
   const projectsActive = activeProjects(db);
   const folders = projectsActive.length ? [] : activeFolders(db, since14, 5);
   const srcs = sourcesWithStats(db);
+  const stale = staleProjects(db);
+  const calendar = s.calendarEnabled ? ((db.select().from(runtime).where(eq(runtime.key, "calendar")).get()?.value as CalendarSnapshot | undefined) ?? null) : null;
   const worker = workerStatus(db);
   const exp = driveExpiry(s.gdriveAccount, s.gdriveTestingMode);
   const driveOffline = srcs.find((x) => x.kind === "gdrive" && x.status === "offline" && /만료|연결되어 있지/.test(x.lastError ?? ""));
@@ -153,6 +161,11 @@ export default async function Home() {
 
           {/* 사이드: 이어서 작업하기, 최근 수정, 소스 상태 */}
           <aside className="space-y-4 border-t border-foreground/10 bg-background/60 p-4 backdrop-blur lg:w-[360px] lg:shrink-0 lg:border-l lg:border-t-0 xl:w-[400px]">
+            {s.calendarEnabled && (
+              <Panel title="일정">
+                <Agenda snap={calendar} hidden={s.calendarHidden} />
+              </Panel>
+            )}
             <Panel
               title="이어서 작업하기"
               action={
@@ -200,6 +213,42 @@ export default async function Home() {
                 )}
               </div>
             </Panel>
+
+            {stale.length > 0 && (
+              <Panel
+                title="쉬고 있는 프로젝트"
+                action={
+                  <Link href="/projects" className="text-xs text-muted-foreground hover:underline">
+                    {stale.length}개 · 프로젝트에서 정리
+                  </Link>
+                }
+              >
+                <ul className="space-y-2">
+                  {stale.slice(0, 4).map((p) => (
+                    <li key={p.id} className="text-sm">
+                      <div className="flex gap-2">
+                        <Link href={`/projects/${p.id}`} className="truncate font-medium hover:underline">
+                          {p.name}
+                        </Link>
+                        <span className="ml-auto shrink-0 text-xs text-muted-foreground">{p.idleDays}일째 변화 없음</span>
+                      </div>
+                      <div className="mt-0.5 flex gap-2 text-xs">
+                        <form action={staleAction.bind(null, p.id, "on_hold")}>
+                          <button className="text-muted-foreground hover:text-foreground hover:underline">보류로</button>
+                        </form>
+                        <form action={staleAction.bind(null, p.id, "done")}>
+                          <button className="text-muted-foreground hover:text-foreground hover:underline">완료로</button>
+                        </form>
+                        <form action={staleAction.bind(null, p.id, "snooze")}>
+                          <button className="text-muted-foreground hover:text-foreground hover:underline">{s.staleProjectDays}일 동안 알리지 않기</button>
+                        </form>
+                      </div>
+                    </li>
+                  ))}
+                  {stale.length > 4 && <li className="text-xs text-muted-foreground">외 {stale.length - 4}개</li>}
+                </ul>
+              </Panel>
+            )}
 
             <Panel
               title="최근 수정"

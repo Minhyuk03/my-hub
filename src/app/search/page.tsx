@@ -11,6 +11,7 @@ import { tagEmojiMap, tagWithEmoji } from "@/server/graph";
 import { projects } from "@/server/db/schema";
 import { DATE_RANGES, fromRecord, parseFilters } from "@/server/search/params";
 import { hybridSearch } from "@/server/search/semantic";
+import { markForeground } from "@/server/ai/foreground";
 import { Ollama, realOllama } from "@/server/ai/ollama";
 import { getSettings } from "@/server/settings";
 
@@ -29,6 +30,7 @@ export default async function SearchPage({ searchParams }: PageProps<"/search">)
   const st = getSettings(db);
   const hasVectors = (db.$client.prepare(`SELECT count(*) FROM item_chunk_state`).pluck().get() as number) > 0;
   const ai = hasVectors ? new Ollama(realOllama()) : null;
+  if (q.trim() && hasVectors && mode !== "keyword") markForeground(db, 2 * 60_000);
   const r = q.trim() ? await hybridSearch(db, ai, st.aiEmbedModel, q, filters, PAGE, (page - 1) * PAGE, hasVectors ? mode : "keyword") : null;
   const modeHref = (m: string) => {
     const u = new URLSearchParams();

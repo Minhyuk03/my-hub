@@ -11,7 +11,7 @@ import { removeItemText, writeItemText } from "../search/index-writer";
 import { nfc } from "../search/text";
 import { getSettings, type Settings } from "../settings";
 import { checkAvailability, realMountEnv, type MountEnv } from "../sources/availability";
-import { isExcludedFolder, isExcludedName, isInside } from "../sources/rules";
+import { isExcludedFolder, isExcludedName, isInside, skippedBySource } from "../sources/rules";
 
 type Source = typeof sources.$inferSelect;
 type Item = typeof items.$inferSelect;
@@ -140,6 +140,7 @@ export async function runScan(db: Db, sourceId: number, deps: ScanDeps, scopePat
           if (nestedRoots.includes(p)) continue;
           cursor.stack.push(p);
         } else if (ent.isFile()) {
+          if (skippedBySource(src.config, p)) continue;
           try {
             files.push({ p, st: await fsp.stat(p) });
           } catch {
@@ -480,7 +481,10 @@ export async function reindexItems(db: Db, deps: ScanDeps, ids: number[]) {
  * 제외는 삭제가 아니므로 deleted 로 표시하지 않고 바로 뺀다. 프로젝트·즐겨찾기에 연결된 폴더 기록은 남긴다.
  */
 export function purgeExcluded(db: Db, settings: Settings = getSettings(db)): number {
-  const srcRoots = new Map(db.select({ id: sources.id, root: sources.rootPath }).from(sources).all().map((s) => [s.id, s.root]));
+  const srcList = db.select({ id: sources.id, root: sources.rootPath, config: sources.config }).from(sources).all();
+  const srcRoots = new Map(srcList.map((s) => [s.id, s.root]));
+  const srcConfig = new Map(srcList.map((s) => [s.id, s.config]));
+  const excludedItem = (p: string, sourceId: number) => excluded(p, sourceId) || skippedBySource(srcConfig.get(sourceId), p);
   const excluded = (p: string, sourceId: number) => {
     if (isExcludedFolder(p, settings.excludedFolders)) return true;
     const root = srcRoots.get(sourceId);
@@ -490,7 +494,7 @@ export function purgeExcluded(db: Db, settings: Settings = getSettings(db)): num
       .split("/")
       .some((seg) => isExcludedName(seg.replace(/#[A-Za-z0-9_-]+$/, ""), settings.excludedPatterns));
   };
-  const rows = db.select({ id: items.id, path: items.path, sourceId: items.sourceId }).from(items).all().filter((r) => excluded(r.path, r.sourceId));
+  const rows = db.select({ id: items.id, path: items.path, sourceId: items.sourceId }).from(items).all().filter((r) => excludedItem(r.path, r.sourceId));
   db.transaction((tx) => {
     for (const r of rows) {
       removeItemText(db, r.id);

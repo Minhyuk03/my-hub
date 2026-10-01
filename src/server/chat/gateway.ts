@@ -21,6 +21,8 @@ export type ExternalRequest = {
   question: string;
   contexts: GatewayContext[];
   dailyLimit: number;
+  /** 설정 "외부 AI 사용" (꺼져 있으면 무조건 막는다) */
+  enabled: boolean;
 };
 
 export class PolicyError extends Error {}
@@ -73,6 +75,10 @@ export async function sendExternal(db: Db, llms: Llms, req: ExternalRequest, opt
   const chars = SYSTEM_PROMPT.length + userMsg.length + history.reduce((n, m) => n + m.content.length, 0);
   const base = { createdAt: now, provider: req.provider, model: req.model, threadId: req.threadId, messageId: req.messageId, question: req.question, itemIds, chunkIds, historyCount: history.length, chars };
 
+  if (!req.enabled) {
+    db.insert(externalLog).values({ ...base, status: "blocked", error: "외부 AI 사용 안 함 (로컬 전용 모드)" }).run();
+    throw new PolicyError("외부 AI 사용이 꺼져 있습니다 (설정 → AI 채팅). 로컬 AI 로 물어보세요.");
+  }
   const denied = deniedItems(db, itemIds);
   if (denied.size) {
     db.insert(externalLog).values({ ...base, status: "blocked", error: `외부 전송 금지 항목 ${denied.size}개가 포함되어 막음` }).run();

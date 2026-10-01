@@ -12,6 +12,7 @@ export async function saveChatSettings(form: FormData) {
     const v = String(form.get(k) ?? "").trim();
     if (MODEL.test(v) && (v || k === "chatOpenAiModel")) setSetting(db, k, v);
   }
+  setSetting(db, "externalAiEnabled", form.get("externalAiEnabled") === "on");
   const c = Number(form.get("chatMaxContextChars"));
   if (c >= 2000 && c <= 60000) setSetting(db, "chatMaxContextChars", c);
   const l = Number(form.get("chatDailyExternalLimit"));

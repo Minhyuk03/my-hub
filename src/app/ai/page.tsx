@@ -14,7 +14,9 @@ import { getSettings } from "@/server/settings";
 import { acceptProject, acceptProjectsAll, acceptTagsAll, rejectAi, runAiNow, saveAiSettings, setAiEnabled } from "./actions";
 import { TagChips } from "./tag-chips";
 import { ChatUpload } from "./chat-upload";
-import { addClaudeCodeSessions } from "./actions";
+import { addClaudeCodeSessions, acceptParaMoveAction, findParaMoves, rejectParaMoveAction } from "./actions";
+import { pendingParaMoves } from "@/server/projects/para-moves";
+import { ConfirmSubmit } from "@/app/settings/confirm-submit";
 
 const STATUS: Record<string, string> = {
   ok: "정상",
@@ -51,7 +53,12 @@ export default async function AiPage() {
       )
       .all(kind) as Row[];
   const tagRows = q("tags").map((r) => ({ ...r, p: JSON.parse(r.payload) as { tags: string[]; summary: string; para?: string } }));
-  const projRows = q("project").map((r) => ({ ...r, p: JSON.parse(r.payload) as { projectId: number; score: number } }));
+  const projRows = q("project")
+    .map((r) => ({ ...r, p: JSON.parse(r.payload) as { projectId: number; score: number } }))
+    .sort((a, b) => b.p.score - a.p.score);
+  const sure = projRows.filter((r) => r.p.score >= 0.75);
+  const paraRows = pendingParaMoves(db);
+  const paraFailed = db.$client.prepare(`SELECT to_path AS toPath, message FROM para_moves WHERE status = 'failed' ORDER BY decided_at DESC LIMIT 3`).all() as { toPath: string; message: string }[];
   const projectNames = new Map((c.prepare(`SELECT id, name FROM projects`).all() as { id: number; name: string }[]).map((p) => [p.id, p.name]));
   const currentTags = new Map<number, string[]>();
   for (const r of c.prepare(`SELECT it.item_id AS id, g.name FROM v_item_tags it JOIN tags g ON g.id = it.tag_id`).all() as { id: number; name: string }[])
@@ -163,15 +170,22 @@ export default async function AiPage() {
         <CardHeader>
           <CardTitle className="flex flex-wrap items-center gap-2">
             프로젝트 제안 ({projRows.length})
+            {sure.length > 0 && sure.length < projRows.length && (
+              <form action={acceptProjectsAll.bind(null, sure.map((r) => r.id))} className="ml-auto">
+                <Button type="submit" size="sm" variant="outline">
+                  유사도 75% 이상 {sure.length}개 수락
+                </Button>
+              </form>
+            )}
             {projRows.length > 1 && (
-              <form action={acceptProjectsAll.bind(null, projRows.map((r) => r.id))} className="ml-auto">
+              <form action={acceptProjectsAll.bind(null, projRows.map((r) => r.id))} className={sure.length > 0 && sure.length < projRows.length ? "" : "ml-auto"}>
                 <Button type="submit" size="sm" variant="outline">
                   모두 수락
                 </Button>
               </form>
             )}
           </CardTitle>
-          <CardDescription>프로젝트에 속한 문서들과 비슷한 문서입니다. 수락하면 그 프로젝트에 개별 항목으로 추가됩니다.</CardDescription>
+          <CardDescription>프로젝트에 속한 문서들과 비슷한 문서입니다 (유사도 높은 순). 수락하면 그 프로젝트에 개별 항목으로 추가됩니다.</CardDescription>
         </CardHeader>
         <CardContent className="divide-y text-sm">
           {!projRows.length && <p className="text-muted-foreground">제안이 없습니다.</p>}
@@ -200,6 +214,54 @@ export default async function AiPage() {
               </span>
               <span className="w-full truncate pl-6 text-xs text-muted-foreground">{shortPath(r.path)}</span>
             </div>
+          ))}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex flex-wrap items-center gap-2">
+            Obsidian 노트 정리 제안 ({paraRows.length})
+            <form action={findParaMoves} className="ml-auto">
+              <Button type="submit" size="sm" variant="outline">
+                제안 다시 찾기
+              </Button>
+            </form>
+          </CardTitle>
+          <CardDescription>
+            완료한 프로젝트 폴더는 4. Archives 로, PARA 폴더 밖의 노트는 비슷한 노트들이 있는 폴더로 옮기자고 제안합니다. <b>&ldquo;옮기기&rdquo;를 누른 것만</b> 실제로
+            옮기고, 새 폴더는 만들지 않으며, 같은 이름이 있으면 옮기지 않습니다. 프로젝트 연결은 그대로 유지됩니다.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="divide-y text-sm">
+          {!paraRows.length && <p className="text-muted-foreground">제안이 없습니다.</p>}
+          {paraRows.map((m) => (
+            <div key={m.id} className="space-y-1 py-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="rounded bg-muted px-1.5 text-xs">{m.kind === "archive" ? "폴더 보관" : "노트 이동"}</span>
+                <span className="text-xs text-muted-foreground">{m.reason}</span>
+                <span className="ml-auto flex gap-1">
+                  <form action={acceptParaMoveAction.bind(null, m.id)}>
+                    <ConfirmSubmit message={`옮길까요?\n\n${m.fromLabel}\n→ ${m.toLabel}`}>옮기기</ConfirmSubmit>
+                  </form>
+                  <form action={rejectParaMoveAction.bind(null, m.id)}>
+                    <Button type="submit" size="sm" variant="ghost" className="h-6 px-2 text-xs">
+                      거절
+                    </Button>
+                  </form>
+                </span>
+              </div>
+              <div className="break-all text-xs">
+                <span className="text-muted-foreground">지금</span> {m.fromLabel}
+                <br />
+                <span className="text-muted-foreground">옮길 곳</span> <b>{m.toLabel}</b>
+              </div>
+            </div>
+          ))}
+          {paraFailed.map((f, i) => (
+            <p key={i} className="py-1 text-xs text-destructive">
+              옮기지 못함: {f.message}
+            </p>
           ))}
         </CardContent>
       </Card>

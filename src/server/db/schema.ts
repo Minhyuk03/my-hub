@@ -432,3 +432,24 @@ export const externalLog = sqliteTable(
   },
   (t) => [index("external_log_time").on(t.createdAt)],
 );
+
+// ---------- Phase 6: Obsidian PARA 정리 제안 ----------
+
+/** 노트·폴더 이동 제안. 수락해야만 옮긴다. 같은 (원래 경로, 옮길 경로) 제안은 다시 만들지 않는다 */
+export const paraMoves = sqliteTable(
+  "para_moves",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    kind: text("kind").$type<"note" | "archive">().notNull(),
+    itemId: integer("item_id"),
+    folderId: integer("folder_id"),
+    fromPath: text("from_path").notNull(),
+    toPath: text("to_path").notNull(),
+    reason: text("reason").notNull(),
+    status: text("status").$type<"pending" | "accepted" | "rejected" | "failed">().notNull().default("pending"),
+    message: text("message"),
+    createdAt: integer("created_at").notNull(),
+    decidedAt: integer("decided_at"),
+  },
+  (t) => [uniqueIndex("para_moves_paths").on(t.fromPath, t.toPath), index("para_moves_status").on(t.status)],
+);

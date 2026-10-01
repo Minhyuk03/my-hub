@@ -52,6 +52,7 @@ async function setup() {
   const id = (rel: string) => db.select().from(items).where(eq(items.path, path.join(root, rel))).get()!.id;
   const folder = (rel: string) => db.select().from(folders).where(eq(folders.path, path.join(root, rel))).get()!.id;
   setSetting(db, "chatOpenAiModel", "gpt-test");
+  setSetting(db, "externalAiEnabled", true);
   return { db, root, src, id, folder };
 }
 
@@ -113,7 +114,7 @@ describe("외부 전송 관문", () => {
     setFolderDeny(db, folder("비밀"), true);
     const ai = fakeAi();
     const ctx = { n: 1, itemId: id("비밀/급여.md"), chunkId: null, title: "급여", path: "x", modifiedAt: null, text: "SECRET-SALARY-777" };
-    await expect(sendExternal(db, ai.llms, { provider: "claude", model: "m", threadId: 0, messageId: null, question: "q", contexts: [ctx], dailyLimit: 100 })).rejects.toThrow(PolicyError);
+    await expect(sendExternal(db, ai.llms, { provider: "claude", model: "m", threadId: 0, messageId: null, question: "q", contexts: [ctx], dailyLimit: 100, enabled: true })).rejects.toThrow(PolicyError);
     expect(ai.sent).toHaveLength(0);
     expect(db.select().from(externalLog).get()).toMatchObject({ status: "blocked", itemIds: [id("비밀/급여.md")] });
   });
@@ -122,7 +123,7 @@ describe("외부 전송 관문", () => {
     const { db, id } = await setup();
     const ai = fakeAi();
     const ctx = { n: 1, itemId: id("공개/회의록.md"), chunkId: null, title: "회의록", path: "x", modifiedAt: null, text: "마감" };
-    const req = { provider: "claude" as const, model: "m", threadId: 0, messageId: null, question: "q", contexts: [ctx], dailyLimit: 1 };
+    const req = { provider: "claude" as const, model: "m", threadId: 0, messageId: null, question: "q", contexts: [ctx], dailyLimit: 1, enabled: true };
     await sendExternal(db, ai.llms, req);
     await expect(sendExternal(db, ai.llms, req)).rejects.toThrow("한도");
     expect(ai.sent).toHaveLength(1);
@@ -212,6 +213,16 @@ describe("AI 채팅 (Phase 5)", () => {
     fs.writeFileSync(path.join(root, "공개/회의록.md"), "# 회의록\n완전히 바뀐 내용");
     await runScan(db, 1, deps());
     expect(db.select().from(chatCitations).where(eq(chatCitations.id, c1.id)).get()!.quote).toMatch("마감은 금요일");
+  });
+
+  it("로컬 전용 모드(기본)면 외부 요청을 서버가 막는다", async () => {
+    const { db } = await setup();
+    setSetting(db, "externalAiEnabled", false);
+    const ai = fakeAi();
+    const r = await ask(db, { ai: null, llms: ai.llms }, { scope: { kind: "all" }, question: "프로젝트 알파", provider: "claude" });
+    expect(ai.sent).toHaveLength(0);
+    expect(db.select().from(chatMessages).where(eq(chatMessages.id, r.messageId)).get()!.error).toMatch("외부 AI 사용이 꺼져");
+    expect(db.select().from(externalLog).get()).toMatchObject({ status: "blocked" });
   });
 
   it("API 키는 오류 메시지·전송 기록에 남지 않는다", async () => {

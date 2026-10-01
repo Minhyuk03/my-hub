@@ -83,3 +83,11 @@ export async function importParaAction(form: FormData) {
   importPara(getDb(), ids);
   redirect("/projects");
 }
+
+/** 홈 "쉬고 있는 프로젝트" 버튼 */
+export async function staleAction(id: number, what: "on_hold" | "done" | "snooze") {
+  const { resolveStale, snoozeStale } = await import("@/server/projects/stale");
+  if (what === "snooze") snoozeStale(getDb(), id);
+  else resolveStale(getDb(), id, what);
+  refresh();
+}

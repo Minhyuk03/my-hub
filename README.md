@@ -204,6 +204,19 @@ npm run hub
   - AI 에게는 내 Mac 의 전체 경로 대신 "소스 이름/소스 안 경로"만 준다. API 키는 오류 메시지·기록에 남지 않게 지운다.
 - 테스트: `tests/chat.test.ts` (금지 자료가 실제 요청 본문에 없는지, 파생 답 제외, 막음 기록, 근거 부족, 원문 보존, 키 비노출).
 
+## 시작 페이지 마무리 (Phase 6)
+
+- **로컬 전용 모드** (기본): 설정 → AI 채팅의 "외부 AI 사용" 이 꺼져 있으면 채팅 화면에 로컬 AI 만 보이고, 관문(`sendExternal`)이 외부 요청을 모두 막는다(막은 기록은 남김).
+- **중복 파일** (`/duplicates`, 동기화 상태 화면에서 링크): 내용 해시가 같은 파일을 묶어 보여 주기만 한다. 로컬·iCloud·외장·Obsidian 은 SHA-256, Drive 는 MD5 라 각각끼리만 비교. iCloud 에만 있는 파일·Notion·GitHub 는 제외.
+- **쉬고 있는 프로젝트** (홈 사이드): 진행중인데 연결된 파일이 `staleProjectDays`(기본 30일) 넘게 안 바뀐 프로젝트. 보류로 / 완료로 / N일 동안 알리지 않기(`staleSnooze`).
+- **Obsidian 노트 정리 제안** (AI 정리 화면, `para_moves`): 완료 프로젝트 폴더 → `4. Archives/폴더`, PARA 밖 노트 → 임베딩 이웃 7개 중 3개 이상이 모인 PARA 하위 폴더. "옮기기"를 누른 것만 옮기고, 옮기기 직전에 다시 확인(원본 있음·대상 없음·대상 폴더 있음·볼트 안). 새 폴더는 만들지 않고, 거절한 제안은 다시 만들지 않는다. 워커가 한 시간에 한 번 찾는다.
+- **홈 일정** (Mac 캘린더 앱): EventKit 권한은 앱 단위라 작은 도우미 `HubCalendar.app`(`native/HubCalendar`, `scripts/service/build-native.sh` 로 빌드 → runtime 폴더)을 워커가 `open -g -j -n -W` 로 15분마다 실행해 앞으로 7일 일정을 JSON 으로 받는다. 설정 → 홈 일정 → "연결" 을 누르면 Mac 화면에 권한 창이 뜬다(직접 허용). 일정은 홈에만 보이고 검색·AI 에 넣지 않는다. 도우미를 다시 빌드하면 권한을 다시 줘야 할 수 있다.
+- **아이폰 홈 화면 앱(PWA)**: `manifest.webmanifest`, 아이콘(`/icon/*`, `/apple-icon`, `src/app/hub-icon.tsx`), 연결이 끊겼을 때만 안내 화면을 보여 주는 `public/sw.js`(내용은 기기에 저장하지 않음). Safari → 공유 → 홈 화면에 추가. 홈 화면 앱은 Safari 와 쿠키가 따로라 처음 한 번 패스코드를 다시 넣는다.
+- 소스 설정 `onlyExt`: 그 확장자만 색인 (Claude Code 세션 = `["jsonl"]`, 스크린샷·메모 파일 제외).
+- 의미 검색·채팅 중에는 워커의 백그라운드 AI 정리가 잠시 쉰다(`src/server/ai/foreground.ts`).
+- 성능(실제 데이터, `scripts/bench/real-bench.ts` → `docs/phase6-performance.md`): 항목 1.8만·조각 1.3만에서 섞어서 검색 p95 115ms, 키워드 83ms, 홈 109ms (목표 0.5초 / 1초).
+- 테스트: `tests/phase6.test.ts`, 로컬 전용 차단은 `tests/chat.test.ts`.
+
 ## 새 소스 커넥터 추가 방법
 
 Google Drive 커넥터(`src/server/connectors/gdrive/`)가 실제 예시다.

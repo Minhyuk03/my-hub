@@ -33,7 +33,7 @@ export default async function ChatPage({ searchParams }: PageProps<"/chat">) {
   try {
     localReady = hasModel(await new Ollama(realOllama()).models(), s.chatLocalModel);
   } catch {}
-  const providers: ProviderInfo[] = [
+  const all: ProviderInfo[] = [
     { id: "local", label: "로컬 AI", model: s.chatLocalModel, ready: localReady, note: localReady ? "이 Mac 안에서만 처리" : "Ollama 꺼짐 또는 모델 없음 (외장 디스크 확인)" },
     { id: "claude", label: "Claude", model: s.chatClaudeModel, ready: hasKey(process.env, "claude"), note: hasKey(process.env, "claude") ? "외부 전송 · 금지 자료 제외" : "API 키 없음 (.env.local)" },
     {
@@ -44,6 +44,7 @@ export default async function ChatPage({ searchParams }: PageProps<"/chat">) {
       note: !hasKey(process.env, "openai") ? "API 키 없음 (.env.local)" : !s.chatOpenAiModel ? "설정에서 모델 이름을 정하세요" : "외부 전송 · 금지 자료 제외",
     },
   ];
+  const providers = s.externalAiEnabled ? all : all.filter((p) => p.id === "local");
 
   return (
     <div className="grid gap-4 lg:grid-cols-[16rem_1fr]">

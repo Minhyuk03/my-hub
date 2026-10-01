@@ -128,3 +128,11 @@ export function checkNewFolder(parent: string, name: string, excludedFolders: st
   if (fs.existsSync(target)) return { ok: false, error: "같은 이름의 폴더가 이미 있습니다." };
   return { ok: true, path: target };
 }
+
+/** 소스 설정 onlyExt(예: Claude Code 세션은 ["jsonl"])에 맞지 않는 파일은 색인하지 않는다. 폴더는 해당 없음 */
+export function skippedBySource(config: Record<string, unknown> | null | undefined, filePath: string): boolean {
+  const only = config?.onlyExt;
+  if (!Array.isArray(only) || !only.length) return false;
+  const ext = filePath.slice(filePath.lastIndexOf(".") + 1).toLowerCase();
+  return filePath.lastIndexOf(".") <= filePath.lastIndexOf("/") || !only.includes(ext);
+}

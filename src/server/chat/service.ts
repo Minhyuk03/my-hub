@@ -6,7 +6,8 @@
  */
 import { asc, eq, inArray } from "drizzle-orm";
 import type { Db } from "../db";
-import { chatCitations, chatMessages, chatThreads, runtime, type ChatProvider, type ChatScope } from "../db/schema";
+import { chatCitations, chatMessages, chatThreads, type ChatProvider, type ChatScope } from "../db/schema";
+import { markForeground } from "../ai/foreground";
 import type { Ollama } from "../ai/ollama";
 import { getSettings } from "../settings";
 import { sendExternal, PolicyError, type GatewayContext } from "./gateway";
@@ -43,10 +44,7 @@ function strategyFor(action: QuickAction | undefined, scope: ChatScope): Strateg
 }
 
 /** 채팅 중에는 백그라운드 AI 정리를 잠시 멈춘다 (16GB 메모리) */
-function markChatActive(db: Db, now: number) {
-  const value = { until: now + 5 * 60_000 };
-  db.insert(runtime).values({ key: "chat_active", value, updatedAt: now }).onConflictDoUpdate({ target: runtime.key, set: { value, updatedAt: now } }).run();
-}
+const markChatActive = (db: Db, now: number) => markForeground(db, 5 * 60_000, now);
 
 export async function ask(db: Db, deps: ChatDeps, input: AskInput, emit: (e: AskEvent) => void = () => {}, signal?: AbortSignal): Promise<{ threadId: number; messageId: number }> {
   const now = deps.now ?? Date.now;
@@ -111,7 +109,7 @@ export async function ask(db: Db, deps: ChatDeps, input: AskInput, emit: (e: Ask
       emit({ type: "delta", text: t });
     };
     if (external) {
-      await sendExternal(db, deps.llms, { provider, model, threadId, messageId: msgId, question, contexts, dailyLimit: s.chatDailyExternalLimit }, { onDelta, signal }, now());
+      await sendExternal(db, deps.llms, { provider, model, threadId, messageId: msgId, question, contexts, dailyLimit: s.chatDailyExternalLimit, enabled: s.externalAiEnabled }, { onDelta, signal }, now());
     } else {
       await deps.llms.local.chat(model, SYSTEM_PROMPT, [...history.messages, { role: "user", content: userTurn(contexts, question) }], { onDelta, signal });
     }

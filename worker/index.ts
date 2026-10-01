@@ -16,7 +16,7 @@ import { getSettings } from "@/server/settings";
 import { checkAvailability } from "@/server/sources/availability";
 import { refreshSuggestions } from "@/server/projects/suggest";
 import { seedDefaultSources } from "@/server/sources/manage";
-import { isExcludedFolder, isExcludedName, isInside } from "@/server/sources/rules";
+import { isExcludedFolder, isExcludedName, isInside, skippedBySource } from "@/server/sources/rules";
 import { processFile, purgeExcluded, realDeps, reindexItems, retryDue, runScan } from "@/server/sync/scanner";
 import { DriveClient, driveEnv } from "@/server/connectors/gdrive/client";
 import { runDriveChanges, runDriveScan } from "@/server/connectors/gdrive/sync";
@@ -31,6 +31,8 @@ import { loadEnvLocal } from "@/server/env";
 import { Ollama, realOllama } from "@/server/ai/ollama";
 import { runAiBatch } from "@/server/ai/pipeline";
 import { importConversations, parseExport } from "@/server/connectors/chats/import";
+import { readCalendar } from "@/server/calendar";
+import { generateParaMoves } from "@/server/projects/para-moves";
 
 loadEnvLocal();
 const db = openDb();
@@ -167,7 +169,10 @@ function startWatcher(src: typeof sources.$inferSelect) {
   const ignored = (p: string) => {
     const rel = p.slice(src.rootPath.length + 1).split("/");
     return (
-      rel.some((seg) => isExcludedName(seg, settings.excludedPatterns)) || isExcludedFolder(p, settings.excludedFolders) || nested.some((n) => isInside(p, n))
+      rel.some((seg) => isExcludedName(seg, settings.excludedPatterns)) ||
+      isExcludedFolder(p, settings.excludedFolders) ||
+      nested.some((n) => isInside(p, n)) ||
+      (skippedBySource(src.config, p) && path.extname(p) !== "")
     );
   };
   const pending = new Set<string>();
@@ -297,6 +302,9 @@ async function handleCommands() {
         case "ai_run_now":
           void aiTick(true);
           break;
+        case "calendar_refresh":
+          void calendarTick(true);
+          break;
         case "refresh_suggestions":
           updateSuggestions();
           break;
@@ -375,6 +383,7 @@ async function recordEnv() {
 // ---------- 로컬 AI (스캔이 없을 때 1분마다 조금씩) ----------
 const ollama = new Ollama(realOllama());
 let aiRunning = false;
+let lastParaAt = 0;
 async function aiTick(force = false) {
   if (aiRunning || stopping || (!force && (current || queue.length))) return;
   // 채팅 중에는 메모리를 위해 쉰다 (대화 모델 + 임베딩 모델만 올라가게)
@@ -385,11 +394,31 @@ async function aiTick(force = false) {
     const t0 = Date.now();
     const r = await runAiBatch(db, ollama);
     setRuntime("ai", { ...r, at: Date.now(), ms: Date.now() - t0 });
+    // 노트 정리(PARA) 제안은 한 시간에 한 번
+    if (r.status === "ok" && Date.now() - lastParaAt > 3600_000) {
+      lastParaAt = Date.now();
+      const n = generateParaMoves(db);
+      if (n) log("노트 정리 제안", n);
+    }
     if (r.embedded || r.chunked || r.projectSuggested || r.tagged)
       log("AI 정리", `임베딩 ${r.embedded}`, `검색 조각 ${r.chunked}`, `프로젝트 제안 ${r.projectSuggested}`, `태그 제안 ${r.tagged}`);
     else if (r.status !== "ok" && r.status !== "off") log("AI 정리 대기", r.status, r.message ?? "");
   } finally {
     aiRunning = false;
+  }
+}
+
+// ---------- Mac 캘린더 일정 (15분마다, 연결한 경우만) ----------
+let calendarBusy = false;
+async function calendarTick(force = false) {
+  if (calendarBusy || stopping || (!force && !getSettings(db).calendarEnabled)) return;
+  calendarBusy = true;
+  try {
+    const snap = await readCalendar(7);
+    setRuntime("calendar", snap);
+    if (snap.status !== "ok") log("캘린더", snap.status, snap.message ?? "");
+  } finally {
+    calendarBusy = false;
   }
 }
 
@@ -435,6 +464,8 @@ const timers = [
   setInterval(heartbeat, 2000),
   setInterval(() => void aiTick().catch((e) => log("AI 오류", e)), 60_000),
   setInterval(() => void recordEnv().catch((e) => log("환경 기록 오류", e)), 30_000),
+  setInterval(() => void calendarTick().catch((e) => log("캘린더 오류", e)), 15 * 60_000),
+  setTimeout(() => void calendarTick().catch((e) => log("캘린더 오류", e)), 5000),
 ];
 void recordEnv();
 void checkSources();

@@ -14,6 +14,10 @@ import { PolicyToggle } from "@/components/policy-toggle";
 import { denyList } from "@/server/chat/policy";
 import { hasKey } from "@/server/chat/llm";
 import { saveChatSettings } from "./chat-actions";
+import { connectCalendar, disconnectCalendar, refreshCalendar, saveCalendarHidden } from "./calendar-actions";
+import type { CalendarSnapshot } from "@/server/calendar";
+import { runtime } from "@/server/db/schema";
+import { eq } from "drizzle-orm";
 import { FolderPicker } from "./folder-picker";
 import { PasscodeForm } from "./passcode-form";
 import { DrivePicker } from "./drive-picker";
@@ -276,6 +280,74 @@ export default async function SettingsPage({ searchParams }: PageProps<"/setting
         </CardContent>
       </Card>
 
+      <Card id="calendar">
+        <CardHeader>
+          <CardTitle>홈 일정 (Mac 캘린더 앱)</CardTitle>
+          <CardDescription>
+            Mac 캘린더 앱에 보이는 일정(iCloud·Google 등 연결된 캘린더 포함)을 홈에 보여 줍니다. 읽기만 하고, 검색 색인·AI 에는 넣지 않습니다.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3 text-sm">
+          {(() => {
+            const snap = db.select().from(runtime).where(eq(runtime.key, "calendar")).get()?.value as CalendarSnapshot | undefined;
+            if (!s.calendarEnabled)
+              return (
+                <form action={connectCalendar} className="space-y-2">
+                  <p className="text-muted-foreground">
+                    &ldquo;연결&rdquo;을 누르면 <b>Mac mini 화면</b>에 &ldquo;나의 허브 캘린더가 캘린더에 접근하려고 합니다&rdquo; 창이 뜹니다. 직접 &ldquo;허용&rdquo;을 눌러 주세요 (2분 안에).
+                  </p>
+                  <Button type="submit" size="sm">
+                    연결
+                  </Button>
+                </form>
+              );
+            return (
+              <div className="space-y-3">
+                <p>
+                  {!snap
+                    ? "일정을 읽는 중… (Mac 화면에 권한 창이 떠 있으면 허용을 눌러 주세요)"
+                    : snap.status === "ok"
+                      ? `연결됨 · 앞으로 ${snap.days}일 일정 ${snap.events.length}개 · 마지막 확인 ${new Date(snap.at).toLocaleString("ko-KR")} (15분마다)`
+                      : snap.status === "denied"
+                        ? "캘린더 접근이 허용되지 않았습니다. 시스템 설정 → 개인정보 보호 및 보안 → 캘린더 에서 '나의 허브 캘린더'(HubCalendar)를 '전체 접근'으로 켠 뒤 다시 확인을 누르세요."
+                        : `읽지 못했습니다: ${snap.message ?? ""}`}
+                </p>
+                <div className="flex gap-2">
+                  <form action={refreshCalendar}>
+                    <Button type="submit" size="sm" variant="outline">
+                      지금 다시 확인
+                    </Button>
+                  </form>
+                  <form action={disconnectCalendar}>
+                    <Button type="submit" size="sm" variant="ghost">
+                      홈에서 숨기기
+                    </Button>
+                  </form>
+                </div>
+                {snap?.status === "ok" && snap.calendars.length > 0 && (
+                  <form action={saveCalendarHidden} className="space-y-1">
+                    <p className="text-muted-foreground">홈에 보일 캘린더</p>
+                    <div className="flex flex-wrap gap-x-4 gap-y-1">
+                      {[...new Map(snap.calendars.map((c) => [c.title, c])).values()].map((c) => (
+                        <label key={c.title} className="flex items-center gap-1.5">
+                          <input type="hidden" name="all" value={c.title} />
+                          <input type="checkbox" name="show" value={c.title} defaultChecked={!s.calendarHidden.includes(c.title)} />
+                          <span className="size-2 rounded-full" style={{ background: c.color }} />
+                          {c.title} <span className="text-xs text-muted-foreground">{c.source}</span>
+                        </label>
+                      ))}
+                    </div>
+                    <Button type="submit" size="sm" variant="outline">
+                      저장
+                    </Button>
+                  </form>
+                )}
+              </div>
+            );
+          })()}
+        </CardContent>
+      </Card>
+
       <Card id="chat">
         <CardHeader>
           <CardTitle>AI 채팅</CardTitle>
@@ -286,6 +358,12 @@ export default async function SettingsPage({ searchParams }: PageProps<"/setting
         </CardHeader>
         <CardContent className="space-y-3 text-sm">
           <form action={saveChatSettings} className="grid gap-2 sm:grid-cols-2">
+            <label className="flex items-center gap-2 sm:col-span-2">
+              <input type="checkbox" name="externalAiEnabled" defaultChecked={s.externalAiEnabled} />
+              <span>
+                외부 AI(Claude·ChatGPT) 사용 <span className="text-muted-foreground">— 끄면 로컬 AI 만 쓰고, 서버가 외부 요청을 모두 막습니다 (요금 없음)</span>
+              </span>
+            </label>
             <label className="space-y-1">
               <span className="text-muted-foreground">로컬 AI 모델 (Ollama)</span>
               <Input name="chatLocalModel" defaultValue={s.chatLocalModel} className="h-9" />
@@ -398,6 +476,7 @@ export default async function SettingsPage({ searchParams }: PageProps<"/setting
               <NumField name="backupHour" label="자동 백업 시각" value={s.backupHour} unit="시" />
               <NumField name="backupKeepDaily" label="일간 백업 보관" value={s.backupKeepDaily} unit="개" />
               <NumField name="backupKeepWeekly" label="주간 백업 보관" value={s.backupKeepWeekly} unit="개" />
+              <NumField name="staleProjectDays" label="쉬고 있는 프로젝트 알림 (0=끔)" value={s.staleProjectDays} unit="일" />
               <p className="text-xs text-muted-foreground">
                 백업 위치: <code>{s.backupDir}</code>
               </p>

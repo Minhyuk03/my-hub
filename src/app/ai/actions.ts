@@ -72,6 +72,25 @@ export async function addClaudeCodeSessions() {
   const { eq } = await import("drizzle-orm");
   const db = getDb();
   const { source } = createSource(db, PATHS.claudeProjects, undefined, "Claude Code 세션");
-  db.update(sources).set({ kind: "ai", config: { externalAi: "deny" } }).where(eq(sources.id, source.id)).run();
+  db.update(sources).set({ kind: "ai", config: { externalAi: "deny", onlyExt: ["jsonl"] } }).where(eq(sources.id, source.id)).run();
+  refresh();
+}
+
+// ---------- Obsidian PARA 정리 제안 ----------
+export async function findParaMoves() {
+  const { generateParaMoves } = await import("@/server/projects/para-moves");
+  generateParaMoves(getDb());
+  refresh();
+}
+
+export async function acceptParaMoveAction(id: number) {
+  const { acceptParaMove } = await import("@/server/projects/para-moves");
+  acceptParaMove(getDb(), id);
+  refresh();
+}
+
+export async function rejectParaMoveAction(id: number) {
+  const { rejectParaMove } = await import("@/server/projects/para-moves");
+  rejectParaMove(getDb(), id);
   refresh();
 }
