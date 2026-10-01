@@ -22,8 +22,12 @@ export async function figmaWhoAmI(): Promise<{ ok: boolean; message: string }> {
 
 /** 팀·프로젝트 주소로 소스 추가 (주소를 확인한 뒤 등록) */
 export async function addFigmaTarget(_: unknown, form: FormData): Promise<{ ok: boolean; message: string }> {
-  const t = parseFigmaTarget(String(form.get("target") ?? ""));
-  if (!t) return { ok: false, message: "팀 주소(…/files/team/숫자/…) 또는 프로젝트 주소(…/files/project/숫자/…)를 넣어 주세요." };
+  const input = String(form.get("target") ?? "");
+  const t = parseFigmaTarget(input);
+  if (!t) {
+    console.warn("[figma] 주소를 해석하지 못함:", input.replace(/[?#].*$/, "").slice(0, 200));
+    return { ok: false, message: "팀 주소(…/files/team/숫자/…) 또는 프로젝트 주소(…/files/project/숫자/…)를 넣어 주세요." };
+  }
   const db = getDb();
   const root = figmaRoot(t.kind, t.id);
   if (sourceRoots(db).includes(root)) return { ok: false, message: "이미 등록되어 있습니다." };
@@ -39,6 +43,7 @@ export async function addFigmaTarget(_: unknown, form: FormData): Promise<{ ok: 
     refresh();
     return { ok: true, message: `'${name}' 을(를) 가져옵니다.` };
   } catch (e) {
+    console.warn("[figma] 등록 실패:", t.kind, t.id, (e as Error).message);
     return { ok: false, message: (e as Error).message };
   }
 }
