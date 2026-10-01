@@ -2,7 +2,7 @@
 
 Mac mini에서 상시 실행되는 개인 통합 허브입니다. 외장 디스크·iCloud Drive·Obsidian 등 흩어진 작업물을 한 화면에서 검색하고, 프로젝트 단위로 묶습니다.
 
-> 현재 단계: **Phase 2** (프로젝트 폴더 연결·연결 제안, launchd 상시 실행, Tailscale 외부 접속)
+> 현재 단계: **Phase 3a** (Google Drive 연결)
 
 ## 실행
 
@@ -126,7 +126,22 @@ npm run restore -- /Volumes/Disk/hub-backups/hub-YYYYMMDD-HHMMSS.db
 npm run hub
 ```
 
+## Google Drive (Phase 3a)
+
+- 읽기 전용(`drive.readonly`) OAuth "데스크톱 앱". `.env.local` 에 `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` (권한 600, git 제외).
+- 연결: 설정 → Google Drive → "Google Drive 연결" (Mac mini 에서만. 돌아오는 주소가 `127.0.0.1:3000/api/gdrive/callback`).
+  refresh token 은 **macOS 키체인**(`my-hub.google-drive`)에만 저장하고 출력하지 않는다. 연결 해제 시 키체인에서 지운다.
+- 범위: 설정에서 고른 폴더만 (공유 드라이브 제외). 폴더마다 소스 하나.
+- 경로 규칙: `gdrive:/<루트폴더ID>/이름#ID/이름#ID` — 같은 이름 파일도 겹치지 않고, 프로젝트 폴더 연결(경로 앞부분 비교)을 그대로 쓴다. 화면에는 `Google Drive/폴더/파일` 로 보인다.
+- 동기화: 처음·주기적 전체 확인(폴더 단위로 중단 후 재개) + 5분마다 변경 목록(Changes API). 폴더·파일은 Drive ID 로 추적하므로 이동·이름 변경에도 같은 항목·같은 프로젝트 연결이 유지된다. 범위 안으로 옮겨 온 폴더는 안의 내용까지 가져온다.
+- 본문: Google 문서·프레젠테이션은 텍스트, 스프레드시트는 CSV 로 받아 색인. PDF·DOCX·HWPX·텍스트는 크기 상한 안에서 받아 추출. 바뀌지 않은 파일은 다시 받지 않는다.
+- 삭제: 전체 확인이 끝까지 성공했을 때, 또는 Drive 변경 목록이 삭제·휴지통·범위 밖 이동을 알려 줬을 때만. 토큰 만료·네트워크 끊김은 오프라인으로 표시하고 지우지 않는다. 요청 제한(429 등)은 1→2→4→8→16초 간격으로 다시 시도.
+- 열기: "Google에서 열기"(원본 웹 주소, 아이폰에서도 가능), 다운로드(Google 문서류는 PDF 로 변환).
+- 코드: `src/server/connectors/gdrive/` (client: API·OAuth, sync: 전체 확인·변경 반영, tokens: 키체인), 테스트 `tests/gdrive.test.ts`(가짜 Drive).
+
 ## 새 소스 커넥터 추가 방법
+
+Google Drive 커넥터(`src/server/connectors/gdrive/`)가 실제 예시다.
 
 지금은 파일시스템 커넥터 하나를 외장 디스크·iCloud·Obsidian이 같이 씁니다. Google Drive·Notion 같은 새 소스는 아래 순서로 추가합니다(Phase 3).
 

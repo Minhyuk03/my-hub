@@ -22,6 +22,8 @@ type SourceLike = { rootPath: string; volumeRoot: string | null; volumeUuid: str
  * 이때 "파일이 전부 사라졌다"고 판단하지 않도록 실제 마운트 여부와 볼륨 UUID를 먼저 확인한다.
  */
 export function checkAvailability(src: SourceLike, env: MountEnv = realMountEnv): Availability {
+  // 클라우드 소스(Google Drive 등)는 파일시스템이 아니라 API 호출 결과로 상태를 정한다
+  if (src.rootPath.startsWith("gdrive:")) return { ok: true };
   if (src.volumeRoot) {
     if (!env.isMountPoint(src.volumeRoot)) return { ok: false, status: "offline", reason: "외장 디스크가 연결되어 있지 않습니다." };
     if (src.volumeUuid) {

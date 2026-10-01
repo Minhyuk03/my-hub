@@ -79,3 +79,16 @@ export function seedDefaultSources(db: Db) {
   }
   db.$client.prepare(`INSERT OR REPLACE INTO settings(key, value) VALUES ('seeded', 'true')`).run();
 }
+
+/** Google Drive 폴더를 소스로 등록 (폴더 ID 기준) */
+export function createDriveSource(db: Db, folderId: string, folderName: string) {
+  const rootPath = `gdrive:/${folderId}`;
+  if (sourceRoots(db).includes(rootPath)) throw new Error("이미 등록된 폴더입니다.");
+  const row = db
+    .insert(sources)
+    .values({ kind: "gdrive", name: `${folderName.normalize("NFC")} (Google Drive)`, rootPath, config: { folderId, folderName }, createdAt: Date.now() })
+    .returning()
+    .get();
+  enqueue(db, "source_added", { sourceId: row.id });
+  return row;
+}

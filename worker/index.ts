@@ -18,13 +18,28 @@ import { refreshSuggestions } from "@/server/projects/suggest";
 import { seedDefaultSources } from "@/server/sources/manage";
 import { isExcludedFolder, isExcludedName, isInside } from "@/server/sources/rules";
 import { processFile, purgeExcluded, realDeps, reindexItems, retryDue, runScan } from "@/server/sync/scanner";
+import { DriveClient, driveEnv } from "@/server/connectors/gdrive/client";
+import { runDriveChanges, runDriveScan } from "@/server/connectors/gdrive/sync";
+import { keychainStore } from "@/server/connectors/gdrive/tokens";
+import { loadEnvLocal } from "@/server/env";
 
+loadEnvLocal();
 const db = openDb();
 let stopping = false;
 const deps = { ...realDeps(), shouldAbort: () => stopping };
 const log = (...a: unknown[]) => console.log(new Date().toLocaleString("ko-KR"), "[worker]", ...a);
 
-type Task = { sourceId: number; scope?: string };
+/** Google Drive: 변경 목록 확인 간격 */
+const DRIVE_CHANGES_MS = 5 * 60_000;
+const lastDriveChanges = new Map<number, number>();
+let driveClient: DriveClient | null = null;
+function drive() {
+  if (!driveClient) driveClient = new DriveClient({ fetch, tokens: keychainStore, ...driveEnv() });
+  return driveClient;
+}
+const isDrive = (s: { kind: string }) => s.kind === "gdrive";
+
+type Task = { sourceId: number; scope?: string; kind?: "changes" };
 const queue: Task[] = [];
 let current: Task | null = null;
 const watchers = new Map<number, fs.FSWatcher>();
@@ -39,7 +54,8 @@ function setRuntime(key: string, value: unknown) {
 
 function enqueueScan(t: Task) {
   // 같은 소스에서 이미 더 넓은 범위가 대기 중이면 생략
-  const covered = (a: Task) => a.sourceId === t.sourceId && (!a.scope || (t.scope && isInside(t.scope, a.scope)));
+  const covered = (a: Task) =>
+    a.sourceId === t.sourceId && (a.kind ?? "") === (t.kind ?? "") && (!a.scope || (t.scope && isInside(t.scope, a.scope)));
   if (queue.some(covered) || (current && covered(current) && !t.scope)) return;
   queue.push(t);
 }
@@ -48,7 +64,15 @@ async function runQueue() {
   if (current || !queue.length || stopping) return;
   current = queue.shift()!;
   const src = db.select().from(sources).where(eq(sources.id, current.sourceId)).get();
-  if (src?.enabled) {
+  if (src?.enabled && isDrive(src) && current.kind === "changes") {
+    const r = await runDriveChanges(db, src.id, { client: drive(), now: Date.now });
+    if (r.result !== "skipped" && (r.result !== "ok" || r.changed)) log("Drive 변경 반영", src.name, r.result, r.changed ?? "", r.message ?? "");
+  } else if (src?.enabled && isDrive(src)) {
+    log("스캔 시작", src.name, "(Google Drive 전체)");
+    const r = await runDriveScan(db, src.id, { client: drive(), now: Date.now, shouldAbort: () => stopping });
+    log("스캔 종료", src.name, r.result, r.message ?? "", r.deleted ? `삭제 ${r.deleted}` : "");
+    if (r.result === "ok") updateSuggestions();
+  } else if (src?.enabled) {
     log("스캔 시작", src.name, current.scope ?? "(전체)");
     const r = await runScan(db, src.id, deps, current.scope);
     log("스캔 종료", src.name, r.result, r.message ?? "", r.deleted ? `삭제 ${r.deleted}` : "");
@@ -138,6 +162,16 @@ async function stopWatcher(id: number) {
 async function checkSources() {
   const settings = getSettings(db);
   for (const src of db.select().from(sources).where(eq(sources.enabled, true)).all()) {
+    if (isDrive(src)) {
+      // Google Drive: 파일 감시 대신 변경 목록을 주기적으로 확인한다. 연결 상태는 API 호출 결과로 정해진다.
+      const due = !src.lastFullScanAt || Date.now() - src.lastFullScanAt > settings.fullScanIntervalHours * 3600_000;
+      if (due && src.status !== "syncing") enqueueScan({ sourceId: src.id });
+      else if (Date.now() - (lastDriveChanges.get(src.id) ?? 0) > DRIVE_CHANGES_MS) {
+        lastDriveChanges.set(src.id, Date.now());
+        enqueueScan({ sourceId: src.id, kind: "changes" });
+      }
+      continue;
+    }
     const a = checkAvailability(src, deps.mount);
     const was = online.get(src.id);
     online.set(src.id, a.ok);
@@ -170,6 +204,10 @@ async function handleCommands() {
     try {
       const sourceId = Number(c.payload.sourceId);
       switch (c.kind) {
+        case "drive_connected":
+          driveClient = null; // 새 토큰으로 다시 만든다
+          for (const s of db.select().from(sources).where(eq(sources.kind, "gdrive")).all()) enqueueScan({ sourceId: s.id });
+          break;
         case "rescan":
         case "source_added":
           online.delete(sourceId); // 다음 확인 때 감시 시작 + 전체 스캔

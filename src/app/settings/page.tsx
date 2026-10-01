@@ -12,6 +12,9 @@ import { removeSourceAction, saveHomeTitle, saveSettings, shortcuts } from "./ac
 import { ConfirmSubmit } from "./confirm-submit";
 import { FolderPicker } from "./folder-picker";
 import { PasscodeForm } from "./passcode-form";
+import { DrivePicker } from "./drive-picker";
+import { disconnectDrive } from "./drive-actions";
+import { driveEnv } from "@/server/connectors/gdrive/client";
 import { saveAllowlist } from "./security-actions";
 import { headers } from "next/headers";
 import { isLocalRequest } from "@/server/http/local";
@@ -29,12 +32,14 @@ function NumField({ name, label, value, unit }: { name: string; label: string; v
   );
 }
 
-export default async function SettingsPage() {
+export default async function SettingsPage({ searchParams }: PageProps<"/settings">) {
   await connection();
   const db = getDb();
   const s = getSettings(db);
   const srcs = sourcesWithStats(db);
   const sc = await shortcuts();
+  const driveMsg = (await searchParams).gdrive;
+  const denv = driveEnv();
   const local = isLocalRequest(await headers());
   const ts = local ? tailscaleSelf() : null;
   const serve = local ? tailscaleServeStatus() : "";
@@ -110,6 +115,39 @@ export default async function SettingsPage() {
           </CardContent>
         </Card>
       )}
+
+      <Card id="gdrive">
+        <CardHeader>
+          <CardTitle>Google Drive</CardTitle>
+          <CardDescription>읽기 전용으로 연결합니다. 고른 폴더만 가져오고, Drive 문서는 원본 Google 화면으로 열립니다.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3 text-sm">
+          {typeof driveMsg === "string" && <p className="rounded-md bg-muted px-3 py-2">{driveMsg}</p>}
+          {!denv.configured ? (
+            <p className="text-destructive">.env.local 에 GOOGLE_CLIENT_ID 와 GOOGLE_CLIENT_SECRET 이 필요합니다.</p>
+          ) : s.gdriveAccount ? (
+            <>
+              <div className="flex flex-wrap items-center gap-2">
+                <span>
+                  연결된 계정: <b>{s.gdriveAccount.email}</b>
+                </span>
+                {local && (
+                  <form action={disconnectDrive}>
+                    <ConfirmSubmit message="Google Drive 연결을 해제할까요? 이미 가져온 색인은 남고, 새 변경은 반영되지 않습니다.">연결 해제</ConfirmSubmit>
+                  </form>
+                )}
+              </div>
+              <DrivePicker />
+            </>
+          ) : local ? (
+            <a href="/api/gdrive/connect" className="inline-flex h-8 items-center rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground">
+              Google Drive 연결
+            </a>
+          ) : (
+            <p className="text-muted-foreground">연결은 Mac mini에서 직접 접속해 진행하세요.</p>
+          )}
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>

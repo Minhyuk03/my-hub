@@ -13,6 +13,7 @@ import { folders, items, projects, shortcuts, sources } from "@/server/db/schema
 import { isLocalRequest } from "@/server/http/local";
 import { linkFolderToProject, pinFolder } from "./actions";
 import { FinderButton } from "./finder-button";
+import { folderUrl } from "@/server/connectors/gdrive/client";
 
 export default async function FolderPage({ params }: PageProps<"/folders/[id]">) {
   await connection();
@@ -57,7 +58,12 @@ export default async function FolderPage({ params }: PageProps<"/folders/[id]">)
             ← {parent.name}
           </Link>
         )}
-        {local && <FinderButton id={f.id} />}
+        {local && s.kind !== "gdrive" && <FinderButton id={f.id} />}
+        {s.kind === "gdrive" && f.externalId && (
+          <a href={folderUrl(f.externalId)} target="_blank" rel="noreferrer" className="text-sm underline">
+            Google Drive에서 열기
+          </a>
+        )}
         {!pinned && (
           <form action={pinFolder.bind(null, f.id)}>
             <Button type="submit" variant="outline" size="sm">

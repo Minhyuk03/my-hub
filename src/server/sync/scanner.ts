@@ -388,7 +388,7 @@ export function recordError(db: Db, itemId: number, e: { kind: string; message: 
  * - 읽지 못한 폴더 아래 항목은 판단하지 않는다.
  * - 보관 기간이 지난 deleted 항목만 실제로 지운다.
  */
-function finalizeDeletions(db: Db, src: Source, scope: string, jobId: number, unreadable: string[], now: number, settings: Settings): number {
+export function finalizeDeletions(db: Db, src: Source, scope: string, jobId: number, unreadable: string[], now: number, settings: Settings): number {
   let count = 0;
   db.transaction(() => {
     const inScope = (p: string) => isInside(p, scope) && !unreadable.some((u) => isInside(p, u));

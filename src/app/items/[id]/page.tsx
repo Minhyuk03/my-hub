@@ -142,9 +142,14 @@ export default async function ItemPage({ params, searchParams }: PageProps<"/ite
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
+        {item.url?.startsWith("https://") && (
+          <a href={item.url} target="_blank" rel="noreferrer" className={buttonVariants({ size: "sm" })}>
+            Google에서 열기
+          </a>
+        )}
         {available && (
-          <a href={`${fileUrl}?download=1`} className={buttonVariants({ size: "sm" })}>
-            원본 다운로드
+          <a href={`${fileUrl}?download=1`} className={buttonVariants({ size: "sm", variant: item.url ? "outline" : "default" })}>
+            {source.kind === "gdrive" && ["gdoc", "gslides", "gsheet"].includes(item.ext) ? "PDF로 다운로드" : "원본 다운로드"}
           </a>
         )}
         {available && item.kind === "pdf" && (
@@ -158,7 +163,7 @@ export default async function ItemPage({ params, searchParams }: PageProps<"/ite
           </a>
         )}
         {/* 서버에서 프로그램을 실행하는 버튼은 Mac mini 본인 접속에서만 보인다 */}
-        {available && local && <LocalOpenButtons id={item.id} hasEditor={hasEditor} />}
+        {available && local && source.kind !== "gdrive" && <LocalOpenButtons id={item.id} hasEditor={hasEditor} />}
       </div>
 
       <ItemProjects itemId={item.id} memberOf={memberOf} projects={allProjects} />

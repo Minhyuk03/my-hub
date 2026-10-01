@@ -6,7 +6,7 @@ import { index, integer, primaryKey, sqliteTable, text, uniqueIndex } from "driz
  * 검색 색인(FTS5 가상 테이블)은 drizzle-kit이 다루지 못하므로 drizzle/0001_fts.sql 에서 직접 만든다.
  */
 
-export type SourceKind = "external" | "icloud" | "obsidian" | "local";
+export type SourceKind = "external" | "icloud" | "obsidian" | "local" | "gdrive";
 export type SourceStatus = "ok" | "syncing" | "offline" | "error";
 
 export const sources = sqliteTable("sources", {
@@ -36,6 +36,8 @@ export const folders = sqliteTable(
     sourceId: integer("source_id").notNull().references(() => sources.id, { onDelete: "cascade" }),
     path: text("path").notNull(),
     name: text("name").notNull(),
+    /** 클라우드 소스의 원본 ID (Google Drive 폴더 ID 등). 이동·이름 변경 추적용 */
+    externalId: text("external_id"),
     /** inode + 장치 번호. 폴더 이동·이름 변경 추적용 */
     fileId: integer("file_id"),
     dev: integer("dev"),
@@ -44,7 +46,7 @@ export const folders = sqliteTable(
     modifiedAt: integer("modified_at"),
     deletedDetectedAt: integer("deleted_detected_at"),
   },
-  (t) => [uniqueIndex("folders_path").on(t.path), index("folders_inode").on(t.dev, t.fileId)],
+  (t) => [uniqueIndex("folders_path").on(t.path), index("folders_inode").on(t.dev, t.fileId), index("folders_external").on(t.sourceId, t.externalId)],
 );
 
 export const items = sqliteTable(
@@ -53,8 +55,12 @@ export const items = sqliteTable(
     id: integer("id").primaryKey({ autoIncrement: true }),
     sourceId: integer("source_id").notNull().references(() => sources.id, { onDelete: "cascade" }),
     folderId: integer("folder_id"),
-    /** 디스크상의 실제 경로 (readdir가 준 그대로. 한글이 NFD일 수 있음) */
+    /** 디스크상의 실제 경로 (readdir가 준 그대로. 한글이 NFD일 수 있음). 클라우드 소스는 "gdrive:/<루트ID>/폴더#ID/파일#ID" 형식 */
     path: text("path").notNull(),
+    /** 클라우드 소스의 원본 ID (Google Drive 파일 ID 등) */
+    externalId: text("external_id"),
+    /** 원본을 여는 웹 주소 (Google Drive 등) */
+    url: text("url"),
     title: text("title").notNull(),
     ext: text("ext").notNull().default(""),
     kind: text("kind").notNull().default("other"),
@@ -80,6 +86,7 @@ export const items = sqliteTable(
     index("items_mtime").on(t.modifiedAt),
     index("items_source").on(t.sourceId, t.state),
     index("items_folder").on(t.folderId),
+    index("items_external").on(t.sourceId, t.externalId),
   ],
 );
 

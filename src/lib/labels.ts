@@ -5,6 +5,7 @@ export const SOURCE_KIND_LABEL: Record<string, string> = {
   icloud: "iCloud Drive",
   obsidian: "Obsidian",
   local: "내장 디스크",
+  gdrive: "Google Drive",
 };
 
 export const SOURCE_STATUS_LABEL: Record<string, string> = {

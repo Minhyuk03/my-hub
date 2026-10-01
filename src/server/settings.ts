@@ -28,6 +28,8 @@ export const DEFAULT_SETTINGS = {
   homeBackground: "" as string,
   /** 홈 가운데 큰 제목 */
   homeTitle: "나의 허브" as string,
+  /** 연결된 Google 계정 (토큰은 키체인에, 여기에는 표시용 정보만) */
+  gdriveAccount: null as { email: string; name: string; connectedAt: number } | null,
 };
 
 export type Settings = typeof DEFAULT_SETTINGS;

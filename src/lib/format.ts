@@ -29,6 +29,8 @@ export function bytes(n: number | null | undefined): string {
 
 /** 홈 디렉터리·iCloud 경로를 짧게 */
 export function shortPath(p: string): string {
+  // Google Drive: "gdrive:/<루트ID>/폴더#ID/파일#ID" → "Google Drive/폴더/파일"
+  if (p.startsWith("gdrive:/")) return p.replace(/^gdrive:\/[^/]+/, "Google Drive").replace(/#[A-Za-z0-9_-]+/g, "");
   return p
     .normalize("NFC")
     .replace(/^\/Users\/[^/]+\/Library\/Mobile Documents\/iCloud~md~obsidian\/Documents/, "Obsidian")

@@ -4,6 +4,9 @@ import type { NextRequest } from "next/server";
 import { getDb } from "@/server/db";
 import { contentDisposition, MIME, resolveItemFile } from "@/server/items/access";
 import { enqueue } from "@/server/sources/manage";
+import { getItem } from "@/server/queries";
+import { EXPORTS } from "@/server/connectors/gdrive/client";
+import { webDrive } from "@/server/connectors/gdrive/web";
 import { isDataless, materialize } from "@/lib/fs/dataless";
 
 /**
@@ -13,6 +16,8 @@ import { isDataless, materialize } from "@/lib/fs/dataless";
  */
 export async function GET(req: NextRequest, ctx: RouteContext<"/api/items/[id]/file">) {
   const { id } = await ctx.params;
+  const drive = await driveFile(Number(id), req.nextUrl.searchParams.get("download") === "1");
+  if (drive) return drive;
   const r = resolveItemFile(getDb(), Number(id));
   if (!r.ok) return new Response(r.message, { status: r.status });
 
@@ -61,4 +66,32 @@ function waitingPage(title: string) {
 <body><div><h1 style="font-size:18px">iCloud에서 받아오는 중…</h1><p>${esc}</p><p>받아오면 자동으로 열립니다. 파일이 크거나 iCloud가 느리면 몇 분 걸릴 수 있습니다.</p></div></body></html>`,
     { status: 202, headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } },
   );
+}
+
+/** Google Drive 항목: Drive 에서 받아 그대로 흘려보낸다. Google 문서류는 PDF 로 변환 */
+async function driveFile(id: number, download: boolean): Promise<Response | null> {
+  const it = getItem(getDb(), id);
+  if (!it || it.source.kind !== "gdrive") return null;
+  if (it.item.state === "deleted") return new Response("삭제된 항목입니다.", { status: 410 });
+  if (!it.item.externalId) return new Response("원본 ID가 없습니다.", { status: 404 });
+  try {
+    const d = webDrive();
+    const meta = await d.getFile(it.item.externalId);
+    const r = await d.download(meta);
+    const exported = !!EXPORTS[meta.mimeType];
+    const name = exported ? `${meta.name}.pdf` : meta.name;
+    const type = exported ? "application/pdf" : (MIME[it.item.ext] ?? r.headers.get("content-type") ?? "application/octet-stream");
+    const headers: Record<string, string> = {
+      "Content-Type": download ? "application/octet-stream" : type,
+      "Content-Disposition": contentDisposition(download ? "attachment" : "inline", name),
+      "X-Content-Type-Options": "nosniff",
+      "Cache-Control": "private, no-store",
+    };
+    if (it.item.ext === "svg") headers["Content-Security-Policy"] = "sandbox; default-src 'none'; style-src 'unsafe-inline'";
+    const len = r.headers.get("content-length");
+    if (len) headers["Content-Length"] = len;
+    return new Response(r.body, { headers });
+  } catch (e) {
+    return new Response(`Google Drive에서 받지 못했습니다: ${(e as Error).message}`, { status: 502, headers: { "Content-Type": "text/plain; charset=utf-8" } });
+  }
 }
