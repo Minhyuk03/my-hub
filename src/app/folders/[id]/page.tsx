@@ -58,7 +58,12 @@ export default async function FolderPage({ params }: PageProps<"/folders/[id]">)
             ← {parent.name}
           </Link>
         )}
-        {local && s.kind !== "gdrive" && s.kind !== "notion" && s.kind !== "github" && <FinderButton id={f.id} />}
+        {local && !["gdrive", "notion", "github", "figma"].includes(s.kind) && <FinderButton id={f.id} />}
+        {s.kind === "figma" && f.externalId?.startsWith("p") && (
+          <a href={`https://www.figma.com/files/project/${f.externalId.slice(1)}`} target="_blank" rel="noreferrer" className="text-sm underline">
+            Figma에서 열기
+          </a>
+        )}
         {s.kind === "notion" && f.externalId && (
           <a href={`https://www.notion.so/${f.externalId}`} target="_blank" rel="noreferrer" className="text-sm underline">
             Notion에서 열기

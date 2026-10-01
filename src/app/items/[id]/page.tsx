@@ -68,7 +68,22 @@ export default async function ItemPage({ params, searchParams }: PageProps<"/ite
   }
 
   let preview: React.ReactNode = null;
-  if (available && item.state === "cloud_only" && !load) {
+  if (source.kind === "figma") {
+    // Figma 파일: 미리보기 이미지(Figma 가 준 임시 주소) + 색인한 글자
+    preview = (
+      <div className="space-y-3">
+        {item.previewText?.startsWith("https://") && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={item.previewText} alt={item.title} className="max-h-[60vh] max-w-full rounded-md border" referrerPolicy="no-referrer" />
+        )}
+        {body ? (
+          <pre className="overflow-x-auto whitespace-pre-wrap rounded-md bg-muted p-4 text-sm">{body.slice(0, MAX_PREVIEW)}</pre>
+        ) : (
+          <p className="text-sm text-muted-foreground">내용 텍스트는 가져오지 않았습니다. (설정 → Figma 에서 켤 수 있음)</p>
+        )}
+      </div>
+    );
+  } else if (available && item.state === "cloud_only" && !load) {
     // 읽으면 iCloud 다운로드가 시작되므로 사용자가 직접 누른 경우에만 불러온다
     preview = (
       <div className="space-y-2 text-sm text-muted-foreground">
@@ -145,10 +160,10 @@ export default async function ItemPage({ params, searchParams }: PageProps<"/ite
       <div className="flex flex-wrap items-center gap-2">
         {item.url?.startsWith("https://") && (
           <a href={item.url} target="_blank" rel="noreferrer" className={buttonVariants({ size: "sm" })}>
-            {source.kind === "notion" ? "Notion에서 열기" : source.kind === "github" ? "GitHub에서 열기" : "Google에서 열기"}
+            {source.kind === "notion" ? "Notion에서 열기" : source.kind === "github" ? "GitHub에서 열기" : source.kind === "figma" ? "Figma에서 열기" : "Google에서 열기"}
           </a>
         )}
-        {available && source.kind !== "notion" && source.kind !== "github" && (
+        {available && !["notion", "github", "figma"].includes(source.kind) && (
           <a href={`${fileUrl}?download=1`} className={buttonVariants({ size: "sm", variant: item.url ? "outline" : "default" })}>
             {source.kind === "gdrive" && ["gdoc", "gslides", "gsheet"].includes(item.ext) ? "PDF로 다운로드" : "원본 다운로드"}
           </a>
@@ -164,7 +179,7 @@ export default async function ItemPage({ params, searchParams }: PageProps<"/ite
           </a>
         )}
         {/* 서버에서 프로그램을 실행하는 버튼은 Mac mini 본인 접속에서만 보인다 */}
-        {available && local && source.kind !== "gdrive" && source.kind !== "notion" && source.kind !== "github" && <LocalOpenButtons id={item.id} hasEditor={hasEditor} />}
+        {available && local && !["gdrive", "notion", "github", "figma"].includes(source.kind) && <LocalOpenButtons id={item.id} hasEditor={hasEditor} />}
       </div>
 
       <ItemProjects itemId={item.id} memberOf={memberOf} projects={allProjects} />

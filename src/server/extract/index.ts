@@ -1,7 +1,7 @@
 import matter from "gray-matter";
 import { strFromU8, unzipSync } from "fflate";
 
-export type ItemKind = "note" | "document" | "pdf" | "code" | "image" | "video" | "audio" | "archive" | "other";
+export type ItemKind = "note" | "document" | "pdf" | "code" | "image" | "video" | "audio" | "archive" | "design" | "other";
 
 const CODE_EXT = new Set(
   "ts tsx js jsx mjs cjs py rb go rs java kt swift c h cpp hpp cs php sh zsh bash sql json yaml yml toml xml html css scss vue svelte lua r dart ini conf".split(" "),

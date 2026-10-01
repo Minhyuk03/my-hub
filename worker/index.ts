@@ -25,6 +25,8 @@ import { NotionClient } from "@/server/connectors/notion/client";
 import { runNotionChanges, runNotionScan } from "@/server/connectors/notion/sync";
 import { GitHubClient } from "@/server/connectors/github/client";
 import { runGitHubChanges, runGitHubScan } from "@/server/connectors/github/sync";
+import { FigmaClient } from "@/server/connectors/figma/client";
+import { runFigmaScan } from "@/server/connectors/figma/sync";
 import { loadEnvLocal } from "@/server/env";
 import { Ollama, realOllama } from "@/server/ai/ollama";
 import { runAiBatch } from "@/server/ai/pipeline";
@@ -47,7 +49,14 @@ const isDrive = (s: { kind: string }) => s.kind === "gdrive";
 const isNotion = (s: { kind: string }) => s.kind === "notion";
 /** 클라우드 소스: 파일 감시 대신 변경 목록을 주기적으로 확인 */
 const isGitHub = (s: { kind: string }) => s.kind === "github";
-const isCloud = (s: { kind: string }) => isDrive(s) || isNotion(s) || isGitHub(s);
+const isFigma = (s: { kind: string }) => s.kind === "figma";
+const isCloud = (s: { kind: string }) => isDrive(s) || isNotion(s) || isGitHub(s) || isFigma(s);
+const FIGMA_CHANGES_MS = 30 * 60_000;
+let figmaClient: FigmaClient | null = null;
+function figma() {
+  if (!figmaClient) figmaClient = new FigmaClient({ fetch, token: process.env.FIGMA_TOKEN ?? "" });
+  return figmaClient;
+}
 const GITHUB_CHANGES_MS = 15 * 60_000;
 let githubClient: GitHubClient | null = null;
 function github() {
@@ -86,7 +95,13 @@ async function runQueue() {
   if (current || !queue.length || stopping) return;
   current = queue.shift()!;
   const src = db.select().from(sources).where(eq(sources.id, current.sourceId)).get();
-  if (src?.enabled && isGitHub(src) && current.kind === "changes") {
+  if (src?.enabled && isFigma(src)) {
+    const full = current.kind !== "changes";
+    if (full) log("스캔 시작", src.name, "(Figma 전체)");
+    const r = await runFigmaScan(db, src.id, { client: figma(), now: Date.now, shouldAbort: () => stopping }, full);
+    if (full || r.result !== "ok") log(full ? "스캔 종료" : "Figma 변경 확인", src.name, r.result, r.message ?? "", r.deleted ? `삭제 ${r.deleted}` : "");
+    if (full && r.result === "ok") updateSuggestions();
+  } else if (src?.enabled && isGitHub(src) && current.kind === "changes") {
     const r = await runGitHubChanges(db, src.id, { client: github(), now: Date.now });
     if (r.result !== "skipped" && (r.result !== "ok" || r.changed)) log("GitHub 변경 반영", src.name, r.result, r.changed ?? "", r.message ?? "");
   } else if (src?.enabled && isGitHub(src)) {
@@ -204,7 +219,7 @@ async function checkSources() {
       // Google Drive·Notion: 파일 감시 대신 변경 목록을 주기적으로 확인한다. 연결 상태는 API 호출 결과로 정해진다.
       const due = !src.lastFullScanAt || Date.now() - src.lastFullScanAt > settings.fullScanIntervalHours * 3600_000;
       if (due && src.status !== "syncing") enqueueScan({ sourceId: src.id });
-      else if (Date.now() - (lastDriveChanges.get(src.id) ?? 0) > (isNotion(src) ? NOTION_CHANGES_MS : isGitHub(src) ? GITHUB_CHANGES_MS : DRIVE_CHANGES_MS)) {
+      else if (Date.now() - (lastDriveChanges.get(src.id) ?? 0) > (isNotion(src) ? NOTION_CHANGES_MS : isGitHub(src) ? GITHUB_CHANGES_MS : isFigma(src) ? FIGMA_CHANGES_MS : DRIVE_CHANGES_MS)) {
         lastDriveChanges.set(src.id, Date.now());
         enqueueScan({ sourceId: src.id, kind: "changes" });
       }

@@ -8,6 +8,7 @@ export const SOURCE_KIND_LABEL: Record<string, string> = {
   gdrive: "Google Drive",
   notion: "Notion",
   github: "GitHub",
+  figma: "Figma",
 };
 
 export const SOURCE_STATUS_LABEL: Record<string, string> = {
@@ -40,6 +41,7 @@ export const KIND_LABEL: Record<string, string> = {
   video: "영상",
   audio: "오디오",
   archive: "압축",
+  design: "디자인",
   other: "기타",
 };
 

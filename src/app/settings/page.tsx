@@ -16,6 +16,8 @@ import { DrivePicker } from "./drive-picker";
 import { NotionRootForm } from "./notion-form";
 import { notionWhoAmI } from "./notion-actions";
 import { addGitHubAccount, githubWhoAmI } from "./github-actions";
+import { figmaWhoAmI, setFigmaFetchText } from "./figma-actions";
+import { FigmaTargetForm } from "./figma-form";
 import { disconnectDrive, setDriveTestingMode } from "./drive-actions";
 import { driveEnv, driveExpiry } from "@/server/connectors/gdrive/client";
 import { saveAllowlist } from "./security-actions";
@@ -50,6 +52,9 @@ export default async function SettingsPage({ searchParams }: PageProps<"/setting
   const githubToken = !!process.env.GITHUB_TOKEN;
   const ghWho = githubToken ? await githubWhoAmI() : null;
   const githubSources = srcs.filter((x) => x.kind === "github");
+  const figmaToken = !!process.env.FIGMA_TOKEN;
+  const fgWho = figmaToken ? await figmaWhoAmI() : null;
+  const figmaSources = srcs.filter((x) => x.kind === "figma");
   const local = isLocalRequest(await headers());
   const ts = local ? tailscaleSelf() : null;
   const serve = local ? tailscaleServeStatus() : "";
@@ -228,6 +233,38 @@ export default async function SettingsPage({ searchParams }: PageProps<"/setting
                   </form>
                 </div>
               )}
+            </>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card id="figma">
+        <CardHeader>
+          <CardTitle>Figma</CardTitle>
+          <CardDescription>
+            Figma 는 &ldquo;내 파일 전체 목록&rdquo;을 주지 않아 팀·프로젝트 주소를 등록합니다. 기본은 파일 이름·수정 시각·미리보기 이미지만 가져오고, 원본은 Figma 에서 열립니다.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3 text-sm">
+          {!figmaToken ? (
+            <p className="text-destructive">.env.local 에 FIGMA_TOKEN 이 필요합니다. (넣은 뒤 허브를 다시 시작)</p>
+          ) : (
+            <>
+              <p className={fgWho?.ok ? "" : "text-destructive"}>{fgWho?.ok ? `토큰 계정: ${fgWho.message}` : fgWho?.message}</p>
+              {figmaSources.map((f) => {
+                const on = !!(f.config as { fetchText?: boolean }).fetchText;
+                return (
+                  <div key={f.id} className="flex flex-wrap items-center gap-2 text-muted-foreground">
+                    <b className="text-foreground">{f.name}</b> · 항목 {f.total.toLocaleString()}개 · 내용 텍스트 {on ? "켜짐" : "꺼짐"}
+                    <form action={setFigmaFetchText.bind(null, f.id, !on)}>
+                      <Button type="submit" size="sm" variant="ghost" className="h-6 text-xs">
+                        {on ? "끄기" : "켜기"}
+                      </Button>
+                    </form>
+                  </div>
+                );
+              })}
+              <FigmaTargetForm />
             </>
           )}
         </CardContent>
