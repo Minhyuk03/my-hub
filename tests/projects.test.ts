@@ -117,6 +117,9 @@ describe("폴더 이름 기반 연결 제안", () => {
     expect(normalizeName("블로그 리뉴얼 (1)")).toBe("블로그리뉴얼");
     expect(normalizeName("2026-09 블로그 리뉴얼")).toBe("블로그리뉴얼");
     expect(cleanName("01. 블로그")).toBe("블로그");
+    // 학기처럼 연도가 이름의 일부면 떼지 않는다
+    expect(normalizeName("2025-2학기")).not.toBe(normalizeName("2026-2학기"));
+    expect(normalizeName("2026 - 2학기")).toBe(normalizeName("2026-2학기"));
   });
   it("한글·영문 표기 차이: 발음 뼈대", () => {
     expect(skeleton("블로그")).toBe(skeleton("blog"));

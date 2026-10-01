@@ -38,7 +38,11 @@ export function cleanName(name: string): string {
   for (let i = 0; i < 3; i++) {
     const before = s;
     for (const re of STRIP_SUFFIX) s = s.replace(re, "").trim();
-    for (const re of STRIP_PREFIX) s = s.replace(re, "").trim();
+    // 앞쪽 날짜는 뒤에 글자가 이어질 때만 뗀다 ("2026-09 블로그" → "블로그", "2025-2학기" 는 그대로: 학기·연도가 이름의 일부)
+    for (const re of STRIP_PREFIX) {
+      const t = s.replace(re, "").trim();
+      if (t && !/^\d/.test(t)) s = t;
+    }
     if (s === before) break;
   }
   return s;
