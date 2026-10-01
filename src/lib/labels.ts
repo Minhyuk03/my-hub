@@ -9,6 +9,7 @@ export const SOURCE_KIND_LABEL: Record<string, string> = {
   notion: "Notion",
   github: "GitHub",
   figma: "Figma",
+  ai: "AI 대화",
 };
 
 export const SOURCE_STATUS_LABEL: Record<string, string> = {
@@ -42,6 +43,7 @@ export const KIND_LABEL: Record<string, string> = {
   audio: "오디오",
   archive: "압축",
   design: "디자인",
+  chat: "AI 대화",
   other: "기타",
 };
 

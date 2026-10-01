@@ -13,10 +13,10 @@ import { mainTagOf } from "../graph";
 import { membershipSql, setItemRule } from "../projects";
 import { getSettings } from "../settings";
 import { runChunks } from "./chunks";
-import { hasModel, Ollama, OllamaError, type ChatMessage } from "./ollama";
+import { EMBED_BATCH, hasModel, Ollama, OllamaError, type ChatMessage } from "./ollama";
 
-export const AI_KINDS = ["note", "document", "pdf", "code"];
-export const TAG_KINDS = ["note", "document", "pdf"];
+export const AI_KINDS = ["note", "document", "pdf", "code", "chat"];
+export const TAG_KINDS = ["note", "document", "pdf", "chat"];
 const MIN_BODY = 200;
 
 const sha = (s: string) => crypto.createHash("sha1").update(s).digest("hex");
@@ -67,7 +67,7 @@ async function runEmbeddings(db: Db, ai: Ollama, model: string, limit: number, n
   const texts = rows.map(embedText);
   // 한 번에 너무 많이 보내면 Ollama 실행기가 끊길 수 있어 32개씩 나눠 보낸다
   const vecs: number[][] = [];
-  for (let i = 0; i < texts.length; i += 32) vecs.push(...(await ai.embed(model, texts.slice(i, i + 32))));
+  for (let i = 0; i < texts.length; i += EMBED_BATCH) vecs.push(...(await ai.embed(model, texts.slice(i, i + EMBED_BATCH))));
   const up = db.$client.prepare(
     `INSERT INTO item_embeddings(item_id, model, vector, text_hash, created_at) VALUES (?, ?, ?, ?, ?)
      ON CONFLICT(item_id) DO UPDATE SET model = excluded.model, vector = excluded.vector, text_hash = excluded.text_hash, created_at = excluded.created_at`,

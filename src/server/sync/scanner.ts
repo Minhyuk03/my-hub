@@ -294,6 +294,7 @@ export async function processFile(
   let tagList: string[] = [];
   let links: string[] = [];
   let error: { kind: string; message: string } | null = null;
+  let extractedTitle: string | null = null;
 
   if (dataless) {
     // iCloud에만 있는 파일: 읽으면 다운로드가 시작되므로 메타데이터만 저장
@@ -337,6 +338,7 @@ export async function processFile(
         body = x.body;
         tagList = x.tags;
         links = x.links;
+        if (x.title) extractedTitle = x.title;
       } catch (e) {
         state = "extract_failed";
         error = { kind: "extract", message: (e as Error).message || "텍스트 추출 실패" };
@@ -344,7 +346,7 @@ export async function processFile(
     }
   }
 
-  const row = { ...base, state, noContentReason, contentHash: hash, previewText: body ? nfc(body.slice(0, 300)) : null };
+  const row = { ...base, ...(extractedTitle ? { title: nfc(extractedTitle) } : {}), state, noContentReason, contentHash: hash, previewText: body ? nfc(body.slice(0, 300)) : null };
   let saved: Item;
   if (existing) {
     saved = db.update(items).set(row).where(eq(items.id, existing.id)).returning().get();

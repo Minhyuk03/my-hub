@@ -1,7 +1,8 @@
 import matter from "gray-matter";
 import { strFromU8, unzipSync } from "fflate";
+import { redactSecrets } from "./redact";
 
-export type ItemKind = "note" | "document" | "pdf" | "code" | "image" | "video" | "audio" | "archive" | "design" | "other";
+export type ItemKind = "note" | "document" | "pdf" | "code" | "image" | "video" | "audio" | "archive" | "design" | "chat" | "other";
 
 const CODE_EXT = new Set(
   "ts tsx js jsx mjs cjs py rb go rs java kt swift c h cpp hpp cs php sh zsh bash sql json yaml yml toml xml html css scss vue svelte lua r dart ini conf".split(" "),
@@ -18,6 +19,7 @@ export function kindOf(ext: string): ItemKind {
   if (e === "pdf") return "pdf";
   if (e === "docx" || e === "hwpx" || e === "pptx" || e === "xlsx" || TEXT_EXT.has(e)) return "document";
   if (e === "ipynb") return "code";
+  if (e === "jsonl") return "chat"; // Claude Code 세션 (다른 jsonl 은 내용 없이 저장)
   if (CODE_EXT.has(e)) return "code";
   if (IMAGE_EXT.has(e)) return "image";
   if (VIDEO_EXT.has(e)) return "video";
@@ -29,10 +31,10 @@ export function kindOf(ext: string): ItemKind {
 /** 본문을 추출할 수 있는 형식인지 */
 export function isExtractable(ext: string): boolean {
   const k = kindOf(ext);
-  return k === "note" || k === "document" || k === "pdf" || k === "code";
+  return k === "note" || k === "document" || k === "pdf" || k === "code" || k === "chat";
 }
 
-export type Extracted = { body: string; tags: string[]; links: string[] };
+export type Extracted = { body: string; tags: string[]; links: string[]; title?: string };
 
 export class BinaryContentError extends Error {}
 
@@ -45,6 +47,7 @@ export async function extractText(ext: string, buf: Buffer): Promise<Extracted> 
   if (e === "pptx") return { body: pptxText(buf), tags: [], links: [] };
   if (e === "xlsx") return { body: xlsxText(buf), tags: [], links: [] };
   if (e === "ipynb") return { body: ipynbText(buf), tags: [], links: [] };
+  if (e === "jsonl") return claudeCodeSession(buf);
   if (buf.subarray(0, 8000).includes(0)) throw new BinaryContentError("텍스트 파일이 아님");
   const text = buf.toString("utf8");
   if (e === "md" || e === "markdown") return markdown(text);
@@ -141,4 +144,45 @@ export function ipynbText(buf: Buffer): string {
     .filter((c) => c.cell_type === "markdown" || c.cell_type === "code")
     .map((c) => (Array.isArray(c.source) ? c.source.join("") : c.source))
     .join("\n\n");
+}
+
+/**
+ * Claude Code 세션(~/.claude/projects 아래 .jsonl): 사용자·Claude 의 대화 글만 모은다.
+ * 도구 실행 결과·생각(thinking)·첨부는 길고 비밀이 섞이기 쉬워 넣지 않는다. 비밀 값은 가린다.
+ * Claude Code 형식이 아니면 내용 없이 돌려준다.
+ */
+export function claudeCodeSession(buf: Buffer): Extracted {
+  const lines: string[] = [];
+  let title = "";
+  let firstUser = "";
+  let isSession = false;
+  for (const raw of buf.toString("utf8").split("\n")) {
+    if (!raw.trim()) continue;
+    let o: { type?: string; isMeta?: boolean; customTitle?: string; message?: { role?: string; content?: unknown } };
+    try {
+      o = JSON.parse(raw);
+    } catch {
+      continue;
+    }
+    if (o.type === "custom-title" && o.customTitle) title = o.customTitle;
+    if ((o.type !== "user" && o.type !== "assistant") || !o.message || o.isMeta) continue;
+    isSession = true;
+    const c = o.message.content;
+    const texts: string[] = [];
+    if (typeof c === "string") texts.push(c);
+    else if (Array.isArray(c))
+      for (const part of c as { type: string; text?: string; name?: string }[]) {
+        if (part.type === "text" && part.text) texts.push(part.text);
+        else if (part.type === "tool_use" && part.name) texts.push(`[도구: ${part.name}]`);
+      }
+    const text = texts.join("\n").trim();
+    // 시스템이 넣은 알림·명령 출력은 건너뛴다
+    if (!text || /^<(command-|local-command|system-reminder|task-notification)/.test(text)) continue;
+    if (o.type === "user" && !firstUser) firstUser = text;
+    lines.push(`${o.type === "user" ? "나" : "Claude"}: ${text}`);
+  }
+  if (!isSession) return { body: "", tags: [], links: [] };
+  const body = redactSecrets(lines.join("\n\n")).slice(0, 300_000);
+  const t = (title || firstUser.split("\n")[0] || "Claude Code 세션").replace(/\s+/g, " ").trim();
+  return { body, tags: [], links: [], title: redactSecrets(t.length > 80 ? t.slice(0, 79) + "…" : t) };
 }

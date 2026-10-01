@@ -92,7 +92,7 @@ describe("의미 검색 (Phase 4)", () => {
 
   it("임베딩 모델을 쓸 수 없으면 키워드 결과만 돌려준다", async () => {
     const { db } = await setup();
-    const res = await hybridSearch(db, fake(true).ai, "bge-m3", "강아지");
+    const res = await hybridSearch(db, fake(true).ai, "bge-m3-off", "강아지"); // 다른 모델 이름: 앞 테스트의 검색어 캐시를 쓰지 않게
     expect(res.mode).toBe("keyword");
     expect(res.semanticNote).toBeTruthy();
     expect(res.hits.map((h) => h.title)).toEqual(["강아지 사진 목록"]);

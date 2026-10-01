@@ -37,6 +37,13 @@ function obsidianUrl(p: string): string | null {
   return `obsidian://open?vault=${encodeURIComponent(path.basename(root))}&file=${encodeURIComponent(rel)}`;
 }
 
+/** 원본 웹 주소에 맞는 버튼 이름 */
+function openLabel(url: string): string {
+  const host = new URL(url).hostname;
+  const name = /notion/.test(host) ? "Notion" : /github/.test(host) ? "GitHub" : /figma/.test(host) ? "Figma" : /claude\.ai/.test(host) ? "claude.ai" : /chatgpt|openai/.test(host) ? "ChatGPT" : "Google";
+  return `${name}에서 열기`;
+}
+
 export default async function ItemPage({ params, searchParams }: PageProps<"/items/[id]">) {
   const { id } = await params;
   const load = (await searchParams).load === "1";
@@ -160,10 +167,10 @@ export default async function ItemPage({ params, searchParams }: PageProps<"/ite
       <div className="flex flex-wrap items-center gap-2">
         {item.url?.startsWith("https://") && (
           <a href={item.url} target="_blank" rel="noreferrer" className={buttonVariants({ size: "sm" })}>
-            {source.kind === "notion" ? "Notion에서 열기" : source.kind === "github" ? "GitHub에서 열기" : source.kind === "figma" ? "Figma에서 열기" : "Google에서 열기"}
+            {openLabel(item.url)}
           </a>
         )}
-        {available && !["notion", "github", "figma"].includes(source.kind) && (
+        {available && !["notion", "github", "figma"].includes(source.kind) && !item.path.startsWith("chat:") && (
           <a href={`${fileUrl}?download=1`} className={buttonVariants({ size: "sm", variant: item.url ? "outline" : "default" })}>
             {source.kind === "gdrive" && ["gdoc", "gslides", "gsheet"].includes(item.ext) ? "PDF로 다운로드" : "원본 다운로드"}
           </a>

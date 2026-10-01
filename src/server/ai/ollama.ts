@@ -5,6 +5,9 @@
 export type OllamaDeps = { fetch: typeof fetch; baseUrl: string };
 export const realOllama = (): OllamaDeps => ({ fetch, baseUrl: process.env.OLLAMA_URL ?? "http://127.0.0.1:11434" });
 
+/** 백그라운드 임베딩 한 번에 보내는 개수. Ollama 는 요청을 하나씩 처리하므로 작게 나눠야 검색어 임베딩이 오래 기다리지 않는다 */
+export const EMBED_BATCH = 8;
+
 export type ChatMessage = { role: "system" | "user" | "assistant"; content: string };
 
 export class OllamaError extends Error {

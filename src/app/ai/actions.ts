@@ -63,3 +63,15 @@ export async function saveAiSettings(form: FormData) {
   setSetting(db, "aiStructuralTags", st);
   refresh();
 }
+
+/** Claude Code 세션 폴더(~/.claude/projects)를 "AI 대화" 소스로 등록. 외부 AI 전송은 기본 금지 */
+export async function addClaudeCodeSessions() {
+  const { createSource } = await import("@/server/sources/manage");
+  const { PATHS } = await import("@/lib/config");
+  const { sources } = await import("@/server/db/schema");
+  const { eq } = await import("drizzle-orm");
+  const db = getDb();
+  const { source } = createSource(db, PATHS.claudeProjects, undefined, "Claude Code 세션");
+  db.update(sources).set({ kind: "ai", config: { externalAi: "deny" } }).where(eq(sources.id, source.id)).run();
+  refresh();
+}

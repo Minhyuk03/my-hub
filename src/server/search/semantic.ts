@@ -77,12 +77,25 @@ function hitsByIds(db: Db, ids: number[]): Map<number, Omit<SearchHit, "snippet"
   return new Map(rows.map((r) => [r.id, r]));
 }
 
-/** 검색어 임베딩 (모델이 이미 올라와 있으면 수십 ms, 아니면 timeoutMs 안에 못 끝나 키워드만) */
-export async function embedQuery(ai: Ollama, model: string, q: string, timeoutMs = 3000): Promise<Float32Array | null> {
+const qcache = new Map<string, Float32Array>();
+
+/**
+ * 검색어 임베딩. 같은 검색어는 기억해 두고, timeoutMs 안에 못 끝나면(모델 불러오는 중·백그라운드 작업 중) null → 키워드만.
+ * 늦게 끝난 결과도 기억해 두므로 같은 검색을 다시 하면 바로 된다.
+ */
+export async function embedQuery(ai: Ollama, model: string, q: string, timeoutMs = 2000): Promise<Float32Array | null> {
+  const key = `${model}|${q.trim().normalize("NFC")}`;
+  const hit = qcache.get(key);
+  if (hit) return hit;
   const t = new Promise<null>((r) => setTimeout(() => r(null), timeoutMs));
   const e = ai
     .embed(model, [q])
-    .then((v) => normalized(v[0]))
+    .then((v) => {
+      const f = normalized(v[0]);
+      qcache.set(key, f);
+      if (qcache.size > 300) qcache.delete(qcache.keys().next().value!);
+      return f;
+    })
     .catch(() => null);
   return Promise.race([e, t]);
 }

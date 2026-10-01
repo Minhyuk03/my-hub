@@ -30,6 +30,7 @@ import { runFigmaScan } from "@/server/connectors/figma/sync";
 import { loadEnvLocal } from "@/server/env";
 import { Ollama, realOllama } from "@/server/ai/ollama";
 import { runAiBatch } from "@/server/ai/pipeline";
+import { importConversations, parseExport } from "@/server/connectors/chats/import";
 
 loadEnvLocal();
 const db = openDb();
@@ -215,6 +216,7 @@ async function stopWatcher(id: number) {
 async function checkSources() {
   const settings = getSettings(db);
   for (const src of db.select().from(sources).where(eq(sources.enabled, true)).all()) {
+    if (src.rootPath.startsWith("chat:")) continue; // 내보내기 파일로 가져온 대화: 스캔할 원본이 없음
     if (isCloud(src)) {
       // Google Drive·Notion: 파일 감시 대신 변경 목록을 주기적으로 확인한다. 연결 상태는 API 호출 결과로 정해진다.
       const due = !src.lastFullScanAt || Date.now() - src.lastFullScanAt > settings.fullScanIntervalHours * 3600_000;
@@ -277,6 +279,21 @@ async function handleCommands() {
         case "reindex":
           await reindexItems(db, deps, c.payload.itemIds as number[]);
           break;
+        case "import_chats": {
+          // 올린 내보내기 파일을 읽어 대화를 가져오고, 다 읽은 파일은 지운다 (내용은 DB 에 있음)
+          const file = String(c.payload.file);
+          try {
+            const { provider, conversations } = parseExport(fs.readFileSync(file), String(c.payload.name ?? ""));
+            const r = importConversations(db, provider, conversations);
+            result = `${provider}: 새 대화 ${r.added}, 갱신 ${r.updated}, 그대로 ${r.skipped}`;
+            log("대화 가져오기", result);
+          } catch (e) {
+            result = `오류: ${(e as Error).message}`;
+          }
+          fs.rmSync(file, { force: true });
+          setRuntime("chat_import", { result, at: Date.now() });
+          break;
+        }
         case "ai_run_now":
           void aiTick(true);
           break;

@@ -7,7 +7,7 @@
 import crypto from "node:crypto";
 import type { Db } from "../db";
 import { removeChunks } from "../search/index-writer";
-import type { Ollama } from "./ollama";
+import { EMBED_BATCH, type Ollama } from "./ollama";
 
 export const CHUNK_SIZE = 700;
 export const CHUNK_OVERLAP = 100;
@@ -70,7 +70,7 @@ export async function runChunks(db: Db, ai: Ollama, model: string, chunkBudget: 
     if (used && used + parts.length > chunkBudget) break;
     const vecs: number[][] = [];
     const inputs = parts.map((p) => `${r.title}\n${p}`);
-    for (let i = 0; i < inputs.length; i += 32) vecs.push(...(await ai.embed(model, inputs.slice(i, i + 32))));
+    for (let i = 0; i < inputs.length; i += EMBED_BATCH) vecs.push(...(await ai.embed(model, inputs.slice(i, i + EMBED_BATCH))));
     db.transaction(() => {
       removeChunks(db, r.id);
       parts.forEach((p, i) => {
