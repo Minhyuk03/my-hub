@@ -71,9 +71,10 @@ export default async function ProjectPage({ params, searchParams }: PageProps<"/
             AI 에게 묻기
           </Link>
         </div>
-        <PolicyToggle kind="project" id={p.id} denied={p.externalPolicy === "deny"} />
         <textarea name="memo" defaultValue={p.memo} placeholder="메모" rows={3} className="w-full rounded-md border bg-background p-2 text-sm" />
       </form>
+      {/* 폼 안에 폼을 넣으면 화면이 깨지므로 저장 폼 밖에 둔다 */}
+      <PolicyToggle kind="project" id={p.id} denied={p.externalPolicy === "deny"} />
 
       <div className="grid gap-4 md:grid-cols-3">
         <div className="space-y-4 md:col-span-2">

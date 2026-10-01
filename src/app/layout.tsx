@@ -18,11 +18,13 @@ export const viewport: Viewport = {
   ],
 };
 
-// 첫 화면이 그려지기 전에 다크 모드 클래스를 정해 깜빡임을 막는다.
-// 저장값: "light" | "dark" | 없음(시스템 설정 따름)
 // 연결이 끊겼을 때 안내 화면을 보여 주는 서비스 워커 (HTTPS 또는 localhost 에서만 동작)
 const swScript = `if("serviceWorker" in navigator)addEventListener("load",function(){navigator.serviceWorker.register("/sw.js").catch(function(){})})`;
-const themeScript = `(function(){try{var t=localStorage.getItem("theme");var d=t?t==="dark":matchMedia("(prefers-color-scheme: dark)").matches;document.documentElement.classList.toggle("dark",d)}catch(e){}})()`;
+
+// 첫 화면이 그려지기 전에 다크 모드 클래스를 정해 깜빡임을 막는다.
+// 저장값: "light" | "dark" | 없음(시스템 설정 따름)
+// 화면이 처음부터 다시 그려지며 <html> 클래스가 초기화돼도(React 복구 렌더링) 저장값대로 되돌린다.
+const themeScript = `(function(){try{var h=document.documentElement;var want=function(){var t=localStorage.getItem("theme");return t?t==="dark":matchMedia("(prefers-color-scheme: dark)").matches};h.classList.toggle("dark",want());new MutationObserver(function(){var w=want();if(h.classList.contains("dark")!==w)h.classList.toggle("dark",w)}).observe(h,{attributes:true,attributeFilter:["class"]})}catch(e){}})()`;
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
