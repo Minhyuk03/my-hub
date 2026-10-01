@@ -10,9 +10,9 @@ import { removeItemText, writeItemText } from "../search/index-writer";
 
 export const seg = (name: string, id: string) => `${(name || "제목 없음").normalize("NFC").replace(/\//g, "／").replace(/#/g, "＃")}#${id}`;
 
-const ROOT_LABEL: Record<string, string> = { gdrive: "Google Drive", notion: "Notion" };
+const ROOT_LABEL: Record<string, string> = { gdrive: "Google Drive", notion: "Notion", github: "GitHub" };
 /** 화면·검색용 경로: ID 조각을 뺀다 → "Google Drive/블로그 리뉴얼/기획서" */
-export const cloudPathLabel = (p: string) => p.replace(/^(gdrive|notion):\/[^/]+/, (_, k: string) => ROOT_LABEL[k] ?? k).replace(/#[A-Za-z0-9_-]+/g, "");
+export const cloudPathLabel = (p: string) => p.replace(/^(gdrive|notion|github):\/[^/]+/, (_, k: string) => ROOT_LABEL[k] ?? k).replace(/#[A-Za-z0-9_-]+/g, "");
 
 export function patchSourceConfig(db: Db, sourceId: number, patch: Record<string, unknown>) {
   const cur = db.select({ config: sources.config }).from(sources).where(eq(sources.id, sourceId)).get()?.config ?? {};

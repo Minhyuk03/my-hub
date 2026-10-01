@@ -15,6 +15,7 @@ import { PasscodeForm } from "./passcode-form";
 import { DrivePicker } from "./drive-picker";
 import { NotionRootForm } from "./notion-form";
 import { notionWhoAmI } from "./notion-actions";
+import { addGitHubAccount, githubWhoAmI } from "./github-actions";
 import { disconnectDrive, setDriveTestingMode } from "./drive-actions";
 import { driveEnv, driveExpiry } from "@/server/connectors/gdrive/client";
 import { saveAllowlist } from "./security-actions";
@@ -46,6 +47,9 @@ export default async function SettingsPage({ searchParams }: PageProps<"/setting
   const notionToken = !!process.env.NOTION_TOKEN;
   const notionWho = notionToken ? await notionWhoAmI() : "";
   const notionSources = srcs.filter((x) => x.kind === "notion");
+  const githubToken = !!process.env.GITHUB_TOKEN;
+  const ghWho = githubToken ? await githubWhoAmI() : null;
+  const githubSources = srcs.filter((x) => x.kind === "github");
   const local = isLocalRequest(await headers());
   const ts = local ? tailscaleSelf() : null;
   const serve = local ? tailscaleServeStatus() : "";
@@ -189,6 +193,41 @@ export default async function SettingsPage({ searchParams }: PageProps<"/setting
               ))}
               <NotionRootForm defaultPage={notionSources.length ? "" : "https://app.notion.com/p/4-3e3533f6b13580518794cd78560ee63c"} />
               <p className="text-xs text-muted-foreground">가져올 페이지는 Notion 에서 ⋯ → 연결(Connections) → 이 통합을 추가해야 보입니다. 하위 페이지는 자동으로 함께 공유됩니다.</p>
+            </>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card id="github">
+        <CardHeader>
+          <CardTitle>GitHub</CardTitle>
+          <CardDescription>읽기 전용 토큰으로 내가 소유한 저장소의 README·최근 커밋·이슈·PR 을 가져옵니다. 원본은 GitHub 에서 열립니다.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3 text-sm">
+          {!githubToken ? (
+            <p className="text-destructive">.env.local 에 GITHUB_TOKEN 이 필요합니다. (넣은 뒤 허브를 다시 시작)</p>
+          ) : (
+            <>
+              <p className={ghWho?.ok ? "" : "text-destructive"}>{ghWho?.ok ? `토큰 계정: ${ghWho.message}` : ghWho?.message}</p>
+              {githubSources.map((g) => (
+                <p key={g.id} className="text-muted-foreground">
+                  가져오는 중: <b className="text-foreground">{g.name}</b> · 항목 {g.total.toLocaleString()}개
+                </p>
+              ))}
+              {ghWho?.ok && !githubSources.length && (
+                <div className="flex flex-wrap gap-2">
+                  <form action={addGitHubAccount.bind(null, false)}>
+                    <Button type="submit" size="sm">
+                      내 저장소 가져오기
+                    </Button>
+                  </form>
+                  <form action={addGitHubAccount.bind(null, true)}>
+                    <Button type="submit" size="sm" variant="outline">
+                      포크한 저장소도 포함
+                    </Button>
+                  </form>
+                </div>
+              )}
             </>
           )}
         </CardContent>

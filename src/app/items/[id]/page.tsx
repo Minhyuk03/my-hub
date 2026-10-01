@@ -96,7 +96,7 @@ export default async function ItemPage({ params, searchParams }: PageProps<"/ite
         <AutoRefresh seconds={4} />
       </p>
     );
-  } else if (body && (item.kind === "note" || source.kind === "notion")) {
+  } else if (body && (item.kind === "note" || source.kind === "notion" || source.kind === "github")) {
     preview = (
       <article className="prose-hub max-w-none break-words">
         <Markdown remarkPlugins={[remarkGfm, remarkBreaks]}>{body.slice(0, MAX_PREVIEW)}</Markdown>
@@ -145,10 +145,10 @@ export default async function ItemPage({ params, searchParams }: PageProps<"/ite
       <div className="flex flex-wrap items-center gap-2">
         {item.url?.startsWith("https://") && (
           <a href={item.url} target="_blank" rel="noreferrer" className={buttonVariants({ size: "sm" })}>
-            {source.kind === "notion" ? "Notion에서 열기" : "Google에서 열기"}
+            {source.kind === "notion" ? "Notion에서 열기" : source.kind === "github" ? "GitHub에서 열기" : "Google에서 열기"}
           </a>
         )}
-        {available && source.kind !== "notion" && (
+        {available && source.kind !== "notion" && source.kind !== "github" && (
           <a href={`${fileUrl}?download=1`} className={buttonVariants({ size: "sm", variant: item.url ? "outline" : "default" })}>
             {source.kind === "gdrive" && ["gdoc", "gslides", "gsheet"].includes(item.ext) ? "PDF로 다운로드" : "원본 다운로드"}
           </a>
@@ -164,7 +164,7 @@ export default async function ItemPage({ params, searchParams }: PageProps<"/ite
           </a>
         )}
         {/* 서버에서 프로그램을 실행하는 버튼은 Mac mini 본인 접속에서만 보인다 */}
-        {available && local && source.kind !== "gdrive" && source.kind !== "notion" && <LocalOpenButtons id={item.id} hasEditor={hasEditor} />}
+        {available && local && source.kind !== "gdrive" && source.kind !== "notion" && source.kind !== "github" && <LocalOpenButtons id={item.id} hasEditor={hasEditor} />}
       </div>
 
       <ItemProjects itemId={item.id} memberOf={memberOf} projects={allProjects} />

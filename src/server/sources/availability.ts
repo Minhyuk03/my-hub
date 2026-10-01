@@ -23,7 +23,7 @@ type SourceLike = { rootPath: string; volumeRoot: string | null; volumeUuid: str
  */
 export function checkAvailability(src: SourceLike, env: MountEnv = realMountEnv): Availability {
   // 클라우드 소스(Google Drive 등)는 파일시스템이 아니라 API 호출 결과로 상태를 정한다
-  if (src.rootPath.startsWith("gdrive:") || src.rootPath.startsWith("notion:")) return { ok: true };
+  if (src.rootPath.startsWith("gdrive:") || src.rootPath.startsWith("notion:") || src.rootPath.startsWith("github:")) return { ok: true };
   if (src.volumeRoot) {
     if (!env.isMountPoint(src.volumeRoot)) return { ok: false, status: "offline", reason: "외장 디스크가 연결되어 있지 않습니다." };
     if (src.volumeUuid) {

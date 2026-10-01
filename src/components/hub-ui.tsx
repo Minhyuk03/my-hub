@@ -1,4 +1,4 @@
-import { BookOpen, Cloud, FileCode, FileImage, FileText, Folder, HardDrive, NotebookPen, Triangle } from "lucide-react";
+import { BookOpen, Cloud, GitBranch, FileCode, FileImage, FileText, Folder, HardDrive, NotebookPen, Triangle } from "lucide-react";
 import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { displayState, SOURCE_KIND_LABEL, SOURCE_STATUS_LABEL } from "@/lib/labels";
@@ -6,7 +6,7 @@ import { relTime, shortPath } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 export function SourceIcon({ kind, className }: { kind: string; className?: string }) {
-  const Icon = kind === "external" ? HardDrive : kind === "icloud" ? Cloud : kind === "obsidian" ? NotebookPen : kind === "gdrive" ? Triangle : kind === "notion" ? BookOpen : Folder;
+  const Icon = kind === "external" ? HardDrive : kind === "icloud" ? Cloud : kind === "obsidian" ? NotebookPen : kind === "gdrive" ? Triangle : kind === "notion" ? BookOpen : kind === "github" ? GitBranch : Folder;
   return (
     <span title={SOURCE_KIND_LABEL[kind] ?? kind}>
       <Icon className={cn("size-4 shrink-0 text-muted-foreground", className)} aria-label={SOURCE_KIND_LABEL[kind] ?? kind} />

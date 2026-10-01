@@ -2,7 +2,7 @@
 
 Mac mini에서 상시 실행되는 개인 통합 허브입니다. 외장 디스크·iCloud Drive·Obsidian 등 흩어진 작업물을 한 화면에서 검색하고, 프로젝트 단위로 묶습니다.
 
-> 현재 단계: **Phase 3b** (Notion 연결)
+> 현재 단계: **Phase 3c** (GitHub 연결)
 
 ## 실행
 
@@ -148,6 +148,16 @@ npm run hub
 - 동기화: 6시간마다 전체 확인(바뀐 페이지만 본문을 다시 받음, 끝까지 성공했을 때만 사라진 페이지를 deleted 로), 10분마다 최근 수정 페이지만 반영.
 - 요청 제한(초당 약 3회)에 맞춰 350ms 간격, 429 는 Retry-After 만큼 기다린다. 토큰 오류·페이지 미공유·네트워크 끊김은 오프라인으로 표시하고 지우지 않는다.
 - 코드: `src/server/connectors/notion/`, 클라우드 공통 경로·폴더 처리 `src/server/connectors/common.ts`, 테스트 `tests/notion.test.ts`(가짜 Notion).
+
+## GitHub (Phase 3c)
+
+- Fine-grained PAT(읽기 전용: Metadata·Contents·Issues·Pull requests **Read-only**)를 `.env.local` 의 `GITHUB_TOKEN` 에 둔다 (출력하지 않음).
+- 설정 → GitHub → "내 저장소 가져오기": 토큰 계정이 소유한 저장소(비공개 포함, 기본은 포크 제외).
+- 저장소 = 폴더 + 같은 경로의 항목(설명·주제·언어·README·최근 커밋 20개). 주제(topics)는 태그. 이슈·PR 은 저장소 아래 항목. 프로젝트에 저장소를 연결하면 저장소와 이슈·PR 이 함께 들어간다.
+- GitHub ID 로 추적하므로 저장소 이름을 바꿔도 같은 항목·프로젝트 연결이 유지된다.
+- 동기화: 6시간마다 전체 확인(바뀐 저장소만 README·커밋을 다시 받음, 끝까지 성공했을 때만 삭제 판단. 이슈가 1,000개를 넘는 저장소는 이슈를 지우지 않음), 15분마다 바뀐 저장소와 이슈만 반영.
+- 요청 한도를 다 쓰면 초기화 시각까지 기다리거나(2분 이내) 오프라인으로 표시. 토큰 오류도 오프라인, 지우지 않는다.
+- 코드: `src/server/connectors/github/`, 테스트 `tests/github.test.ts`(가짜 GitHub).
 
 ## 로컬 AI 자동 분류 (`/ai`, AI 정리)
 

@@ -6,7 +6,7 @@ import { blob, index, integer, primaryKey, sqliteTable, text, uniqueIndex } from
  * 검색 색인(FTS5 가상 테이블)은 drizzle-kit이 다루지 못하므로 drizzle/0001_fts.sql 에서 직접 만든다.
  */
 
-export type SourceKind = "external" | "icloud" | "obsidian" | "local" | "gdrive" | "notion";
+export type SourceKind = "external" | "icloud" | "obsidian" | "local" | "gdrive" | "notion" | "github";
 export type SourceStatus = "ok" | "syncing" | "offline" | "error";
 
 export const sources = sqliteTable("sources", {

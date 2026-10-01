@@ -7,6 +7,7 @@ export const SOURCE_KIND_LABEL: Record<string, string> = {
   local: "내장 디스크",
   gdrive: "Google Drive",
   notion: "Notion",
+  github: "GitHub",
 };
 
 export const SOURCE_STATUS_LABEL: Record<string, string> = {
