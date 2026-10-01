@@ -250,3 +250,14 @@ describe("Google Drive 연결 (Phase 3a)", () => {
     expect(titles(db)).toEqual(["파일1.txt", "파일2.txt"]);
   });
 });
+
+describe("테스트 중인 Google 앱의 7일 만료 알림", () => {
+  it("남은 날과 만료 임박·만료를 계산한다", async () => {
+    const { driveExpiry } = await import("@/server/connectors/gdrive/client");
+    const t0 = Date.UTC(2026, 9, 1);
+    expect(driveExpiry({ connectedAt: t0 }, true, t0 + 86400_000)).toMatchObject({ leftDays: 6, soon: false, expired: false });
+    expect(driveExpiry({ connectedAt: t0 }, true, t0 + 6.5 * 86400_000)).toMatchObject({ soon: true, expired: false });
+    expect(driveExpiry({ connectedAt: t0 }, true, t0 + 8 * 86400_000)).toMatchObject({ expired: true, leftDays: 0 });
+    expect(driveExpiry({ connectedAt: t0 }, false)).toBeNull();
+  });
+});

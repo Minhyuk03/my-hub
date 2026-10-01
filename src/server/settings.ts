@@ -30,6 +30,8 @@ export const DEFAULT_SETTINGS = {
   homeTitle: "나의 허브" as string,
   /** 연결된 Google 계정 (토큰은 키체인에, 여기에는 표시용 정보만) */
   gdriveAccount: null as { email: string; name: string; connectedAt: number } | null,
+  /** Google 앱이 "테스트 중" 상태면 연결이 7일마다 만료된다 (프로덕션으로 게시하면 false) */
+  gdriveTestingMode: true as boolean,
 };
 
 export type Settings = typeof DEFAULT_SETTINGS;

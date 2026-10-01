@@ -48,3 +48,8 @@ export async function disconnectDrive() {
   setSetting(getDb(), "gdriveAccount", null);
   refresh();
 }
+
+export async function setDriveTestingMode(on: boolean) {
+  setSetting(getDb(), "gdriveTestingMode", on);
+  refresh();
+}

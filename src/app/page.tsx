@@ -15,6 +15,7 @@ import {
   workerStatus,
 } from "@/server/queries";
 import { getSettings } from "@/server/settings";
+import { driveExpiry } from "@/server/connectors/gdrive/client";
 
 function Panel({
   title,
@@ -60,6 +61,13 @@ export default async function Home() {
   const folders = projectsActive.length ? [] : activeFolders(db, since14, 5);
   const srcs = sourcesWithStats(db);
   const worker = workerStatus(db);
+  const exp = driveExpiry(s.gdriveAccount, s.gdriveTestingMode);
+  const driveOffline = srcs.find((x) => x.kind === "gdrive" && x.status === "offline" && /만료|연결되어 있지/.test(x.lastError ?? ""));
+  const driveNotice = driveOffline
+    ? "Google Drive 연결이 만료되었습니다. 가져온 내용은 그대로 검색됩니다."
+    : exp?.soon
+      ? `Google Drive 연결이 ${exp.leftDays <= 1 ? "곧" : `${exp.leftDays}일 후`} 만료됩니다 (테스트 중인 Google 앱은 7일마다 다시 연결 필요).`
+      : null;
 
   return (
     <>
@@ -83,6 +91,11 @@ export default async function Home() {
       {/* 홈은 화면 전체 폭을 쓴다: 위 북마크 바, 가운데 검색·타일, 오른쪽 끝에 붙은 사이드 패널 */}
       <div className="-my-6 mx-[calc(50%-50vw)] flex min-h-[calc(100dvh-61px)] flex-col">
         <BookmarkBar root={bar.root} groups={bar.groups} />
+        {driveNotice && (
+          <a href="/settings#gdrive" className="block border-b border-foreground/10 bg-amber-500/15 px-4 py-2 text-sm hover:bg-amber-500/25">
+            {driveNotice} → 설정에서 다시 연결
+          </a>
+        )}
 
         <div className="flex flex-1 flex-col lg:flex-row">
           {/* 가운데: 검색 + 즐겨찾기 타일 */}

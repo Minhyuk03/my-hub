@@ -13,8 +13,8 @@ import { ConfirmSubmit } from "./confirm-submit";
 import { FolderPicker } from "./folder-picker";
 import { PasscodeForm } from "./passcode-form";
 import { DrivePicker } from "./drive-picker";
-import { disconnectDrive } from "./drive-actions";
-import { driveEnv } from "@/server/connectors/gdrive/client";
+import { disconnectDrive, setDriveTestingMode } from "./drive-actions";
+import { driveEnv, driveExpiry } from "@/server/connectors/gdrive/client";
 import { saveAllowlist } from "./security-actions";
 import { headers } from "next/headers";
 import { isLocalRequest } from "@/server/http/local";
@@ -40,6 +40,7 @@ export default async function SettingsPage({ searchParams }: PageProps<"/setting
   const sc = await shortcuts();
   const driveMsg = (await searchParams).gdrive;
   const denv = driveEnv();
+  const dexp = driveExpiry(s.gdriveAccount, s.gdriveTestingMode);
   const local = isLocalRequest(await headers());
   const ts = local ? tailscaleSelf() : null;
   const serve = local ? tailscaleServeStatus() : "";
@@ -132,11 +133,27 @@ export default async function SettingsPage({ searchParams }: PageProps<"/setting
                   연결된 계정: <b>{s.gdriveAccount.email}</b>
                 </span>
                 {local && (
+                  <a href="/api/gdrive/connect" className="text-sm underline">
+                    다시 연결
+                  </a>
+                )}
+                {local && (
                   <form action={disconnectDrive}>
                     <ConfirmSubmit message="Google Drive 연결을 해제할까요? 이미 가져온 색인은 남고, 새 변경은 반영되지 않습니다.">연결 해제</ConfirmSubmit>
                   </form>
                 )}
               </div>
+              {dexp && (
+                <p className={dexp.soon ? "text-amber-600 dark:text-amber-400" : "text-muted-foreground"}>
+                  테스트 중인 Google 앱: {dexp.expired ? "연결이 만료되었습니다. 다시 연결하세요." : `${new Date(dexp.expiresAt).toLocaleDateString("ko-KR")}에 만료 (${dexp.leftDays}일 남음)`}
+                </p>
+              )}
+              <form action={setDriveTestingMode.bind(null, !s.gdriveTestingMode)} className="text-xs text-muted-foreground">
+                {s.gdriveTestingMode ? "Google Cloud 에서 앱을 프로덕션으로 게시했다면 " : "앱이 다시 테스트 상태라면 "}
+                <button type="submit" className="underline">
+                  {s.gdriveTestingMode ? "만료 알림 끄기" : "만료 알림 켜기"}
+                </button>
+              </form>
               <DrivePicker />
             </>
           ) : local ? (

@@ -190,3 +190,11 @@ export function driveEnv() {
 }
 
 export const folderUrl = (id: string) => `https://drive.google.com/drive/folders/${encodeURIComponent(id)}`;
+
+/** "테스트 중" 앱의 연결 만료 (연결 후 7일). 남은 시간과 상태를 돌려준다 */
+export function driveExpiry(account: { connectedAt: number } | null, testingMode: boolean, now = Date.now()) {
+  if (!account || !testingMode) return null;
+  const expiresAt = account.connectedAt + 7 * 86400_000;
+  const left = expiresAt - now;
+  return { expiresAt, leftDays: Math.max(0, Math.ceil(left / 86400_000)), expired: left <= 0, soon: left < 36 * 3600_000 };
+}
