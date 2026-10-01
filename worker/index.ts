@@ -17,7 +17,7 @@ import { checkAvailability } from "@/server/sources/availability";
 import { refreshSuggestions } from "@/server/projects/suggest";
 import { seedDefaultSources } from "@/server/sources/manage";
 import { isExcludedFolder, isExcludedName, isInside } from "@/server/sources/rules";
-import { processFile, realDeps, reindexItems, retryDue, runScan } from "@/server/sync/scanner";
+import { processFile, purgeExcluded, realDeps, reindexItems, retryDue, runScan } from "@/server/sync/scanner";
 
 const db = openDb();
 let stopping = false;
@@ -193,7 +193,10 @@ async function handleCommands() {
           result = doBackup();
           await recordEnv();
           break;
-        case "settings_changed":
+        case "settings_changed": {
+          const n = purgeExcluded(db);
+          if (n) log("제외 규칙 적용: 색인에서 뺀 항목", n);
+        }
           for (const id of [...watchers.keys()]) {
             await stopWatcher(id);
             online.delete(id);
@@ -279,6 +282,10 @@ for (const j of db.select().from(scanJobs).where(eq(scanJobs.result, "aborted"))
   if (src) enqueueScan({ sourceId: j.sourceId, scope: j.scopePath === src.rootPath ? undefined : j.scopePath });
 }
 log("시작", `pid ${process.pid}`);
+{
+  const n = purgeExcluded(db);
+  if (n) log("제외 규칙 적용: 색인에서 뺀 항목", n);
+}
 
 const timers = [
   setInterval(() => void handleCommands().catch((e) => log("명령 처리 오류", e)), 1000),

@@ -7,7 +7,7 @@ import { HOME, PATHS } from "@/lib/config";
 import { isMountPoint } from "@/lib/env-check";
 import { getDb } from "@/server/db";
 import { createSource, enqueue, previewNewSource, removeSource } from "@/server/sources/manage";
-import { checkNewFolder, isExcludedFolder, isExcludedName, isExcludedVolume, isInside, volumeRootOf, type SourceCheck } from "@/server/sources/rules";
+import { checkNewFolder, normalizeUserPath, isExcludedFolder, isExcludedName, isExcludedVolume, isInside, volumeRootOf, type SourceCheck } from "@/server/sources/rules";
 import { getSettings, setSetting } from "@/server/settings";
 
 export type DirListing = {
@@ -118,7 +118,7 @@ export async function saveSettings(form: FormData) {
     const n = Number(form.get(k));
     return Number.isFinite(n) && n >= min && n <= max ? n : def;
   };
-  const folders = lines(form.get("excludedFolders"));
+  const folders = [...new Set(lines(form.get("excludedFolders")).map(normalizeUserPath))];
   // 백업 폴더는 항상 제외
   if (!folders.includes(s.backupDir)) folders.push(s.backupDir);
   setSetting(db, "excludedFolders", folders);

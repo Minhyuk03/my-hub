@@ -156,6 +156,7 @@ export async function runScan(db: Db, sourceId: number, deps: ScanDeps, scopePat
     // 끝까지 확인했으면, 마지막으로 소스가 여전히 연결돼 있는지 확인한 뒤에만 삭제를 판단한다
     const final = checkAvailability(src, deps.mount);
     if (!final.ok) throw new OfflineError(final.reason);
+    purgeExcluded(db, settings);
     const deleted = finalizeDeletions(db, src, scope, jobId, cursor.unreadable, deps.now(), settings);
     const now = deps.now();
     db.update(scanJobs)
@@ -468,4 +469,41 @@ export async function reindexItems(db: Db, deps: ScanDeps, ids: number[]) {
     db.update(items).set({ modifiedAt: -1 }).where(eq(items.id, it.id)).run();
     await processFile(db, src, it.path, st, deps, settings);
   }
+}
+
+/**
+ * 제외 폴더·제외 이름에 해당하는 항목을 색인에서 지운다 (실제 파일은 건드리지 않음).
+ * 제외는 삭제가 아니므로 deleted 로 표시하지 않고 바로 뺀다. 프로젝트·즐겨찾기에 연결된 폴더 기록은 남긴다.
+ */
+export function purgeExcluded(db: Db, settings: Settings = getSettings(db)): number {
+  const srcRoots = new Map(db.select({ id: sources.id, root: sources.rootPath }).from(sources).all().map((s) => [s.id, s.root]));
+  const excluded = (p: string, sourceId: number) => {
+    if (isExcludedFolder(p, settings.excludedFolders)) return true;
+    const root = srcRoots.get(sourceId);
+    if (!root || !isInside(p, root)) return false;
+    return p
+      .slice(root.length + 1)
+      .split("/")
+      .some((seg) => isExcludedName(seg, settings.excludedPatterns));
+  };
+  const rows = db.select({ id: items.id, path: items.path, sourceId: items.sourceId }).from(items).all().filter((r) => excluded(r.path, r.sourceId));
+  db.transaction((tx) => {
+    for (const r of rows) {
+      removeItemText(db, r.id);
+      for (const t of [itemTags, itemLinks, itemErrors]) tx.delete(t).where(eq(t.itemId, r.id)).run();
+      tx.run(sql`DELETE FROM project_items WHERE item_id = ${r.id}`);
+      tx.delete(items).where(eq(items.id, r.id)).run();
+    }
+    const fs_ = db
+      .select({ id: folders.id, path: folders.path, sourceId: folders.sourceId })
+      .from(folders)
+      .all()
+      .filter((f) => excluded(f.path, f.sourceId));
+    for (const f of fs_) {
+      const used =
+        tx.get<{ n: number }>(sql`SELECT (SELECT count(*) FROM project_folders WHERE folder_id = ${f.id}) + (SELECT count(*) FROM shortcuts WHERE kind = 'folder' AND target = ${String(f.id)}) AS n`)?.n ?? 0;
+      if (!used) tx.delete(folders).where(eq(folders.id, f.id)).run();
+    }
+  });
+  return rows.length;
 }

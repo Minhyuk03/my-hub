@@ -1,6 +1,7 @@
 import { eq } from "drizzle-orm";
 import { DEFAULT_EXCLUDED_FOLDERS, DEFAULT_EXCLUDED_PATTERNS, PATHS } from "@/lib/config";
 import { DEFAULT_SYNONYMS } from "./projects/synonyms";
+import { normalizeUserPath } from "./sources/rules";
 import type { Db } from "./db";
 import { settings } from "./db/schema";
 
@@ -35,6 +36,8 @@ export function getSettings(db: Db): Settings {
   const rows = db.select().from(settings).all();
   const out = { ...DEFAULT_SETTINGS } as Record<string, unknown>;
   for (const r of rows) if (r.key in out) out[r.key] = r.value;
+  // 예전에 저장된 이스케이프 경로도 바르게 읽는다
+  out.excludedFolders = [...new Set((out.excludedFolders as string[]).map(normalizeUserPath).filter(Boolean))];
   return out as Settings;
 }
 

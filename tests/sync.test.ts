@@ -284,3 +284,23 @@ describe("동기화 규칙 (5장)", () => {
     expect(links).toEqual(["다른 노트"]);
   });
 });
+
+describe("제외 규칙 적용", () => {
+  it("터미널식 경로로 입력한 한글(NFD) 제외 폴더도 적용되고, 색인에서 빠진다(삭제 표시 아님)", async () => {
+    const { purgeExcluded } = await import("@/server/sync/scanner");
+    const { setSetting, getSettings } = await import("@/server/settings");
+    const db = testDb();
+    const root = tmpDir("my ");
+    write(root, "일정관리".normalize("NFD") + "/daily.md", "일정");
+    write(root, "노트.md", "노트");
+    const src = addSource(db, root);
+    await runScan(db, src.id, deps());
+    expect(allItems(db)).toHaveLength(2);
+    setSetting(db, "excludedFolders", [`${root.replace(/ /g, "\\ ")}/일정관리`]);
+    expect(getSettings(db).excludedFolders).toContain(`${root}/일정관리`);
+    expect(purgeExcluded(db)).toBe(1);
+    const r = await runScan(db, src.id, deps());
+    expect(r.deleted).toBe(0);
+    expect(allItems(db).map((i) => i.title)).toEqual(["노트"]);
+  });
+});

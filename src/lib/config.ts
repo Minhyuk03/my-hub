@@ -22,7 +22,7 @@ export const PATHS = {
 /** 인덱싱할 폴더는 처음엔 비워 두고 설정 화면에서 추가한다. */
 export const DEFAULT_INDEXED_FOLDERS: string[] = [];
 
-export const DEFAULT_EXCLUDED_FOLDERS = ["/Volumes/Disk/Nikon", PATHS.backupDir];
+export const DEFAULT_EXCLUDED_FOLDERS = ["/Volumes/Disk/Nikon", PATHS.backupDir, "/Volumes/Disk/ollama"];
 
 /** 인덱싱하지 않을 볼륨 (이름 패턴). 백업·설치 이미지 볼륨. */
 export const EXCLUDED_VOLUME_PATTERNS = [

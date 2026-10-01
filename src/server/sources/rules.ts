@@ -26,8 +26,23 @@ export function isExcludedVolume(p: string): boolean {
   return EXCLUDED_VOLUME_PATTERNS.some((re) => re.test(p));
 }
 
+/** 한글 경로는 NFC 로 맞춰 비교한다 (macOS 파일 이름은 NFD 인 경우가 많음) */
 export function isExcludedFolder(p: string, excludedFolders: string[]): boolean {
-  return excludedFolders.some((f) => isInside(p, f));
+  const n = p.normalize("NFC");
+  return excludedFolders.some((f) => isInside(n, f.normalize("NFC")));
+}
+
+/**
+ * 사용자가 입력한 경로 정리: 따옴표·터미널 이스케이프(\ , \~) 제거, ~ → 홈 폴더, NFC, 끝의 / 제거.
+ * 예) ~/Library/Mobile\ Documents/iCloud\~md\~obsidian → /Users/mh/Library/Mobile Documents/iCloud~md~obsidian
+ */
+export function normalizeUserPath(input: string): string {
+  let s = input.trim().replace(/^(['"])(.*)\1$/, "$2");
+  s = s.replace(/\\(.)/g, "$1");
+  if (s === "~" || s.startsWith("~/")) s = HOME + s.slice(1);
+  s = s.normalize("NFC");
+  if (s.length > 1) s = s.replace(/\/+$/, "");
+  return s;
 }
 
 /** /Volumes/Disk/a/b → /Volumes/Disk */
