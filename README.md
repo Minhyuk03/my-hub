@@ -180,6 +180,16 @@ npm run hub
 - 외장 디스크가 없으면 "모델 없음", Ollama 가 꺼져 있으면 "Ollama 꺼짐"으로 표시하고 기다린다.
 - 항목 화면: AI 요약, 태그 제안, 붙인 태그 빼기, 비슷한 문서.
 
+## 의미 검색과 AI 대화 기록 (Phase 4)
+
+- **의미 검색**: 본문을 700자 조각(100자 겹침, 형식별 문서당 상한)으로 나눠 `bge-m3` 로 임베딩, `sqlite-vec`(`vec_chunks`, 1024차원 코사인)에 저장. 워커가 1분마다 최대 192조각씩 만든다(`aiChunkBudget`). 본문이 바뀌면 조각을 다시 만들고, 항목이 지워지면 조각도 지운다.
+- **검색 모드**(`/search`): 섞어서(키워드 + 의미, RRF k=60) · 키워드 · 의미. 조각이 하나라도 있으면 켜진다. 의미로 찾은 결과에는 "뜻이 비슷함 N%" 표시.
+- 검색어 임베딩은 캐시하고, 2초 안에 안 오면(또는 Ollama 꺼짐) 키워드 결과만 보여 주고 그 사실을 알린다.
+- 측정: `scripts/ai/bench-semantic.ts` → `docs/phase4-semantic.md` (3만 조각 p95 54ms, 10만 조각 p95 170ms, 검색어 임베딩 p50 약 0.2초).
+- **Claude Code 세션**: `~/.claude/projects` 를 소스로 추가하면 `.jsonl` 을 대화 항목으로 인덱싱. 사람·AI 글과 `[도구: 이름]` 표시만 남기고 도구 결과·생각·시스템 알림은 뺀다.
+- **claude.ai / ChatGPT**: 각 서비스의 "데이터 내보내기" zip(또는 `conversations.json`)을 AI 정리 → "AI 대화 기록"에서 올린다(이 Mac 에서만). 다시 올리면 바뀐 대화만 갱신하고, 새 파일에 없는 대화도 지우지 않는다. 올린 파일은 가져온 뒤 삭제.
+- 대화 본문의 API 키·토큰·개인 키·`KEY=값` 은 `redactSecrets` 로 가린 뒤 저장. 대화 소스는 외부 AI 전송 기본 금지(`config.externalAi = "deny"`, Phase 5 에서 서버가 강제).
+
 ## 새 소스 커넥터 추가 방법
 
 Google Drive 커넥터(`src/server/connectors/gdrive/`)가 실제 예시다.
