@@ -365,7 +365,8 @@ async function aiTick(force = false) {
     const t0 = Date.now();
     const r = await runAiBatch(db, ollama);
     setRuntime("ai", { ...r, at: Date.now(), ms: Date.now() - t0 });
-    if (r.embedded || r.projectSuggested || r.tagged) log("AI 정리", `임베딩 ${r.embedded}`, `프로젝트 제안 ${r.projectSuggested}`, `태그 제안 ${r.tagged}`);
+    if (r.embedded || r.chunked || r.projectSuggested || r.tagged)
+      log("AI 정리", `임베딩 ${r.embedded}`, `검색 조각 ${r.chunked}`, `프로젝트 제안 ${r.projectSuggested}`, `태그 제안 ${r.tagged}`);
     else if (r.status !== "ok" && r.status !== "off") log("AI 정리 대기", r.status, r.message ?? "");
   } finally {
     aiRunning = false;

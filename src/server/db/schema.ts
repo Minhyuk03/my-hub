@@ -323,3 +323,26 @@ export const itemTagsManual = sqliteTable(
   },
   (t) => [primaryKey({ columns: [t.itemId, t.tagId] }), index("item_tags_manual_tag").on(t.tagId)],
 );
+
+// ---------- Phase 4: 의미 검색 ----------
+
+/** 긴 문서를 나눈 조각. 벡터는 sqlite-vec 가상 테이블 vec_chunks(chunk_id, embedding float[1024]) 에 있다 */
+export const itemChunks = sqliteTable(
+  "item_chunks",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    itemId: integer("item_id").notNull(),
+    idx: integer("idx").notNull(),
+    text: text("text").notNull(),
+  },
+  (t) => [index("item_chunks_item").on(t.itemId, t.idx)],
+);
+
+/** 문서별 조각 상태: 어떤 본문(해시)으로 어떤 모델이 만들었는지 */
+export const itemChunkState = sqliteTable("item_chunk_state", {
+  itemId: integer("item_id").primaryKey(),
+  model: text("model").notNull(),
+  textHash: text("text_hash").notNull(),
+  chunks: integer("chunks").notNull(),
+  createdAt: integer("created_at").notNull(),
+});

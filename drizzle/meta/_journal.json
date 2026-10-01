@@ -64,6 +64,20 @@
       "when": 1790821368823,
       "tag": "0008_tag_view",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1790835404993,
+      "tag": "0009_chunks",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "6",
+      "when": 1790835405468,
+      "tag": "0010_vec",
+      "breakpoints": true
     }
   ]
 }

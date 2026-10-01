@@ -12,6 +12,7 @@ import { aiSuggestions, itemEmbeddings, itemTagsManual, projects, tags } from ".
 import { mainTagOf } from "../graph";
 import { membershipSql, setItemRule } from "../projects";
 import { getSettings } from "../settings";
+import { runChunks } from "./chunks";
 import { hasModel, Ollama, OllamaError, type ChatMessage } from "./ollama";
 
 export const AI_KINDS = ["note", "document", "pdf", "code"];
@@ -44,7 +45,7 @@ const pathLabel = (p: string) =>
 
 type Candidate = { id: number; title: string; path: string; kind: string; body: string };
 
-export type AiRunResult = { status: "ok" | "off" | "offline" | "no_model" | "error"; message?: string; embedded: number; projectSuggested: number; tagged: number };
+export type AiRunResult = { status: "ok" | "off" | "offline" | "no_model" | "error"; message?: string; embedded: number; chunked: number; projectSuggested: number; tagged: number };
 
 // ---------- 1) 임베딩 ----------
 function embedText(c: Candidate) {
@@ -253,13 +254,14 @@ async function runTags(db: Db, ai: Ollama, model: string, limit: number, structu
 // ---------- 한 번 실행 ----------
 export async function runAiBatch(db: Db, ai: Ollama, now = Date.now()): Promise<AiRunResult> {
   const s = getSettings(db);
-  const res: AiRunResult = { status: "ok", embedded: 0, projectSuggested: 0, tagged: 0 };
+  const res: AiRunResult = { status: "ok", embedded: 0, chunked: 0, projectSuggested: 0, tagged: 0 };
   if (!s.aiEnabled) return { ...res, status: "off" };
   try {
     const models = await ai.models();
     if (!hasModel(models, s.aiEmbedModel) || !hasModel(models, s.aiChatModel))
       return { ...res, status: "no_model", message: "모델이 없습니다. 외장 디스크(Disk)가 연결되어 있는지 확인하세요." };
     res.embedded = await runEmbeddings(db, ai, s.aiEmbedModel, 256, now);
+    res.chunked = (await runChunks(db, ai, s.aiEmbedModel, s.aiChunkBudget)).chunks;
     res.projectSuggested = suggestProjects(db, s.aiEmbedModel, s.aiProjectThreshold, now);
     res.tagged = await runTags(db, ai, s.aiChatModel, s.aiBatchSize, s.aiStructuralTags, now);
     return res;

@@ -42,6 +42,8 @@ export const DEFAULT_SETTINGS = {
   aiProjectThreshold: 0.62 as number,
   /** 구조용 태그: 제안하지 않는다 */
   aiStructuralTags: ["para", "daily", "weekly"] as string[],
+  /** 1분마다 만들 의미 검색 조각 수 */
+  aiChunkBudget: 192 as number,
 };
 
 export type Settings = typeof DEFAULT_SETTINGS;

@@ -53,6 +53,9 @@ export function removeSource(db: Db, sourceId: number) {
     tx.run(sql`DELETE FROM item_tags WHERE item_id IN (SELECT id FROM items WHERE source_id = ${sourceId})`);
     tx.run(sql`DELETE FROM item_tags_manual WHERE item_id IN (SELECT id FROM items WHERE source_id = ${sourceId})`);
     tx.run(sql`DELETE FROM item_embeddings WHERE item_id IN (SELECT id FROM items WHERE source_id = ${sourceId})`);
+    tx.run(sql`DELETE FROM vec_chunks WHERE chunk_id IN (SELECT c.id FROM item_chunks c JOIN items i ON i.id = c.item_id WHERE i.source_id = ${sourceId})`);
+    tx.run(sql`DELETE FROM item_chunks WHERE item_id IN (SELECT id FROM items WHERE source_id = ${sourceId})`);
+    tx.run(sql`DELETE FROM item_chunk_state WHERE item_id IN (SELECT id FROM items WHERE source_id = ${sourceId})`);
     tx.run(sql`DELETE FROM ai_suggestions WHERE item_id IN (SELECT id FROM items WHERE source_id = ${sourceId})`);
     tx.run(sql`DELETE FROM item_links WHERE item_id IN (SELECT id FROM items WHERE source_id = ${sourceId})`);
     tx.run(sql`DELETE FROM item_errors WHERE item_id IN (SELECT id FROM items WHERE source_id = ${sourceId})`);

@@ -10,7 +10,9 @@ import { allTags } from "@/server/queries";
 import { tagEmojiMap, tagWithEmoji } from "@/server/graph";
 import { projects } from "@/server/db/schema";
 import { DATE_RANGES, fromRecord, parseFilters } from "@/server/search/params";
-import { search } from "@/server/search/query";
+import { hybridSearch } from "@/server/search/semantic";
+import { Ollama, realOllama } from "@/server/ai/ollama";
+import { getSettings } from "@/server/settings";
 
 const PAGE = 30;
 
@@ -22,7 +24,18 @@ export default async function SearchPage({ searchParams }: PageProps<"/search">)
   const page = Math.max(1, Number(p.get("page") ?? 1));
   const db = getDb();
   const filters = parseFilters(p);
-  const r = q.trim() ? search(db, q, filters, PAGE, (page - 1) * PAGE) : null;
+  // 검색 방식: 섞어서(기본) / 키워드 / 의미. 의미 검색은 조각(임베딩)이 있을 때만
+  const mode = (["keyword", "semantic", "hybrid"].includes(p.get("mode") ?? "") ? p.get("mode") : "hybrid") as "hybrid" | "keyword" | "semantic";
+  const st = getSettings(db);
+  const hasVectors = (db.$client.prepare(`SELECT count(*) FROM item_chunk_state`).pluck().get() as number) > 0;
+  const ai = hasVectors ? new Ollama(realOllama()) : null;
+  const r = q.trim() ? await hybridSearch(db, ai, st.aiEmbedModel, q, filters, PAGE, (page - 1) * PAGE, hasVectors ? mode : "keyword") : null;
+  const modeHref = (m: string) => {
+    const u = new URLSearchParams();
+    for (const [k, v] of Object.entries(sp)) for (const x of Array.isArray(v) ? v : v ? [v] : []) if (k !== "page" && k !== "mode") u.append(k, x);
+    u.set("mode", m);
+    return `/search?${u}`;
+  };
   const srcs = db.select().from(sources).all();
   const tags = allTags(db, 50);
   const tagEmoji = tagEmojiMap(db);
@@ -102,18 +115,45 @@ export default async function SearchPage({ searchParams }: PageProps<"/search">)
       </form>
 
       <div>
-        <form action="/search" className="mb-4 hidden md:block">
+        <form action="/search" className="mb-2 hidden md:block">
           <Input name="q" defaultValue={q} placeholder="검색어를 입력하세요" />
+          <input type="hidden" name="mode" value={mode} />
         </form>
+        <div className="mb-3 flex flex-wrap items-center gap-1 text-xs">
+          {(
+            [
+              ["hybrid", "섞어서"],
+              ["keyword", "키워드"],
+              ["semantic", "의미"],
+            ] as const
+          ).map(([m, label]) => (
+            <Link
+              key={m}
+              href={modeHref(m)}
+              className={`rounded-full border px-2 py-0.5 ${mode === m ? "border-primary bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted"} ${!hasVectors && m !== "keyword" ? "pointer-events-none opacity-40" : ""}`}
+            >
+              {label}
+            </Link>
+          ))}
+          <span className="text-muted-foreground">
+            {hasVectors ? "의미 검색: 낱말이 달라도 뜻이 비슷한 문서를 찾습니다" : "의미 검색은 AI 정리를 켜면 쓸 수 있습니다"}
+          </span>
+        </div>
         {!r && <p className="text-sm text-muted-foreground">검색어를 입력하세요. 어디서든 ⌘K 로 검색창을 열 수 있습니다.</p>}
         {r && (
           <>
             <p className="mb-2 text-xs text-muted-foreground">
-              {r.total.toLocaleString()}{r.capped ? "+" : ""}건 · {r.tookMs.toFixed(0)}ms{r.capped && " (결과가 많아 일부만 정렬했습니다. 검색어나 필터를 더 구체적으로 입력하세요)"}
+              {r.total.toLocaleString()}
+              {r.capped ? "+" : ""}건 · {r.tookMs.toFixed(0)}ms · {r.mode === "hybrid" ? "섞어서" : r.mode === "semantic" ? "의미" : "키워드"}
+              {r.capped && " (결과가 많아 일부만 정렬했습니다. 검색어나 필터를 더 구체적으로 입력하세요)"}
+              {r.semanticNote && <span className="text-amber-600 dark:text-amber-400"> · {r.semanticNote}</span>}
             </p>
             <div className="divide-y">
               {r.hits.map((h) => (
                 <ItemRow key={h.id} item={h}>
+                  {"similarity" in h && typeof h.similarity === "number" && !h.highlights.length && (
+                    <span className="ml-6 rounded bg-muted px-1.5 text-[10px] text-muted-foreground">뜻이 비슷함 {Math.round(h.similarity * 100)}%</span>
+                  )}
                   {h.snippet && (
                     <p className="line-clamp-2 pl-6 text-sm">
                       <Highlighted text={h.snippet} ranges={h.highlights} />

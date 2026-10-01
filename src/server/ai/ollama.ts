@@ -50,8 +50,9 @@ export class Ollama {
     }
   }
 
-  async embed(model: string, input: string[]): Promise<number[][]> {
-    const r = await this.post<{ embeddings: number[][] }>("/api/embed", { model, input, keep_alive: "10m", truncate: true });
+  async embed(model: string, input: string[], keepAlive = "60m"): Promise<number[][]> {
+    // 검색어 임베딩이 바로 되도록 임베딩 모델은 오래 올려 둔다 (1.6GB)
+    const r = await this.post<{ embeddings: number[][] }>("/api/embed", { model, input, keep_alive: keepAlive, truncate: true });
     return r.embeddings;
   }
 

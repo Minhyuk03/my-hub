@@ -1,4 +1,5 @@
 import Database from "better-sqlite3";
+import * as sqliteVec from "sqlite-vec";
 import { drizzle, type BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import { migrate } from "drizzle-orm/better-sqlite3/migrator";
 import fs from "node:fs";
@@ -19,6 +20,8 @@ export function openDb(file: string = DB_FILE, opts: { migrate?: boolean } = {})
   sqlite.pragma("synchronous = NORMAL");
   sqlite.pragma("busy_timeout = 5000");
   sqlite.pragma("foreign_keys = ON");
+  // 의미 검색용 벡터 확장 (vec_chunks 테이블)
+  sqliteVec.load(sqlite);
   const db = drizzle(sqlite, { schema }) as Db;
   if (opts.migrate !== false) migrate(db, { migrationsFolder: MIGRATIONS });
   return db;

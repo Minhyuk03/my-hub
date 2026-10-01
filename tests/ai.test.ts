@@ -19,6 +19,7 @@ function fakeOllama(opts: { models?: string[]; down?: boolean; chat?: (prompt: s
     const low = t.toLowerCase();
     const v: number[] = WORDS.map((w) => (low.includes(w) ? 1 : 0));
     v.push(0.05);
+    while (v.length < 1024) v.push(0); // bge-m3 와 같은 1024차원
     return v;
   };
   const f = (async (url: string | URL | Request, init?: RequestInit) => {
