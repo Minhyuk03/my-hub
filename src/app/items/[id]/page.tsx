@@ -21,6 +21,7 @@ import { getItem } from "@/server/queries";
 import { mainTagOf, tagEmojiMap } from "@/server/graph";
 import { projectList, projectsForItem } from "@/server/projects";
 import { ItemProjects } from "./item-projects";
+import { ItemAi } from "./item-ai";
 import { enqueue } from "@/server/sources/manage";
 import { getSettings } from "@/server/settings";
 import { LocalOpenButtons } from "./open-buttons";
@@ -167,6 +168,8 @@ export default async function ItemPage({ params, searchParams }: PageProps<"/ite
       </div>
 
       <ItemProjects itemId={item.id} memberOf={memberOf} projects={allProjects} />
+
+      <ItemAi itemId={item.id} emoji={Object.fromEntries(tagEmoji)} />
 
       <div>{preview}</div>
     </div>

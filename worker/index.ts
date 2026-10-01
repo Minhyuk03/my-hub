@@ -22,6 +22,8 @@ import { DriveClient, driveEnv } from "@/server/connectors/gdrive/client";
 import { runDriveChanges, runDriveScan } from "@/server/connectors/gdrive/sync";
 import { keychainStore } from "@/server/connectors/gdrive/tokens";
 import { loadEnvLocal } from "@/server/env";
+import { Ollama, realOllama } from "@/server/ai/ollama";
+import { runAiBatch } from "@/server/ai/pipeline";
 
 loadEnvLocal();
 const db = openDb();
@@ -224,6 +226,9 @@ async function handleCommands() {
         case "reindex":
           await reindexItems(db, deps, c.payload.itemIds as number[]);
           break;
+        case "ai_run_now":
+          void aiTick(true);
+          break;
         case "refresh_suggestions":
           updateSuggestions();
           break;
@@ -299,6 +304,23 @@ async function recordEnv() {
   setRuntime("env", { volumes: env.volumes, paths: env.paths, backups: safeList(s.backupDir), pending: safeList(PENDING_DIR), at: Date.now() });
 }
 
+// ---------- 로컬 AI (스캔이 없을 때 1분마다 조금씩) ----------
+const ollama = new Ollama(realOllama());
+let aiRunning = false;
+async function aiTick(force = false) {
+  if (aiRunning || stopping || (!force && (current || queue.length))) return;
+  aiRunning = true;
+  try {
+    const t0 = Date.now();
+    const r = await runAiBatch(db, ollama);
+    setRuntime("ai", { ...r, at: Date.now(), ms: Date.now() - t0 });
+    if (r.embedded || r.projectSuggested || r.tagged) log("AI 정리", `임베딩 ${r.embedded}`, `프로젝트 제안 ${r.projectSuggested}`, `태그 제안 ${r.tagged}`);
+    else if (r.status !== "ok" && r.status !== "off") log("AI 정리 대기", r.status, r.message ?? "");
+  } finally {
+    aiRunning = false;
+  }
+}
+
 function heartbeat() {
   const running = db.select().from(scanJobs).where(eq(scanJobs.result, "running")).all();
   setRuntime("worker", {
@@ -339,6 +361,7 @@ const timers = [
     }
   }, 60_000),
   setInterval(heartbeat, 2000),
+  setInterval(() => void aiTick().catch((e) => log("AI 오류", e)), 60_000),
   setInterval(() => void recordEnv().catch((e) => log("환경 기록 오류", e)), 30_000),
 ];
 void recordEnv();

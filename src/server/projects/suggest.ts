@@ -275,7 +275,11 @@ export function acceptSuggestion(db: Db, id: number, name?: string): number {
   const s = db.select().from(projectSuggestions).where(eq(projectSuggestions.id, id)).get();
   if (!s || s.status !== "pending") throw new Error("이미 처리된 제안입니다.");
   let projectId = s.projectId;
-  if (!projectId) projectId = createProject(db, name?.trim() || s.suggestedName).id;
+  if (!projectId) {
+    // 같은 이름의 프로젝트가 이미 있으면 새로 만들지 않고 거기에 합친다
+    const wanted = (name?.trim() || s.suggestedName).normalize("NFC");
+    projectId = db.select().from(projects).all().find((p) => p.name.normalize("NFC") === wanted)?.id ?? createProject(db, wanted).id;
+  }
   for (const fid of s.folderIds) linkFolder(db, projectId, fid, { addedBy: "suggestion" });
   db.update(projectSuggestions).set({ status: "accepted", projectId, decidedAt: Date.now() }).where(eq(projectSuggestions.id, id)).run();
   return projectId;

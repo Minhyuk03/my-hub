@@ -86,7 +86,7 @@ export function search(db: Db, query: string, filters: SearchFilters = {}, limit
     whereParams.push(...m.params);
   }
   if (filters.tag) {
-    where.push(`i.id IN (SELECT it.item_id FROM item_tags it JOIN tags g ON g.id = it.tag_id WHERE g.name = ?)`);
+    where.push(`i.id IN (SELECT it.item_id FROM v_item_tags it JOIN tags g ON g.id = it.tag_id WHERE g.name = ?)`);
     whereParams.push(nfc(filters.tag));
   }
 

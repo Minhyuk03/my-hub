@@ -32,6 +32,16 @@ export const DEFAULT_SETTINGS = {
   gdriveAccount: null as { email: string; name: string; connectedAt: number } | null,
   /** Google 앱이 "테스트 중" 상태면 연결이 7일마다 만료된다 (프로덕션으로 게시하면 false) */
   gdriveTestingMode: true as boolean,
+  /** 로컬 AI 자동 분류 (Ollama). 제안만 만들고, 수락해야 적용 */
+  aiEnabled: false as boolean,
+  aiChatModel: "exaone3.5:2.4b" as string,
+  aiEmbedModel: "bge-m3" as string,
+  /** 한 번에 태그를 제안할 문서 수 (1분마다 실행) */
+  aiBatchSize: 10 as number,
+  /** 프로젝트 제안 기준 유사도 (0~1, 높을수록 엄격) */
+  aiProjectThreshold: 0.62 as number,
+  /** 구조용 태그: 제안하지 않는다 */
+  aiStructuralTags: ["para", "daily", "weekly"] as string[],
 };
 
 export type Settings = typeof DEFAULT_SETTINGS;

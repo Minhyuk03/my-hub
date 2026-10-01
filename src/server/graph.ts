@@ -86,7 +86,7 @@ export function buildGraph(db: Db, opts: GraphOptions = {}): { nodes: GraphNode[
   const noteTags = new Map<number, string[]>();
 
   if (opts.includeTags || opts.colorBy === "tag") {
-    const rows = c.prepare(`SELECT it.item_id AS id, g.name FROM item_tags it JOIN tags g ON g.id = it.tag_id`).all() as { id: number; name: string }[];
+    const rows = c.prepare(`SELECT it.item_id AS id, g.name FROM v_item_tags it JOIN tags g ON g.id = it.tag_id`).all() as { id: number; name: string }[];
     for (const r of rows) if (noteIds.has(r.id)) noteTags.set(r.id, [...(noteTags.get(r.id) ?? []), r.name]);
   }
 
@@ -151,7 +151,7 @@ export function buildGraph(db: Db, opts: GraphOptions = {}): { nodes: GraphNode[
 export function tagTree(db: Db) {
   const rows = db.$client
     .prepare(
-      `SELECT g.name, count(DISTINCT it.item_id) AS n FROM tags g JOIN item_tags it ON it.tag_id = g.id
+      `SELECT g.name, count(DISTINCT it.item_id) AS n FROM tags g JOIN v_item_tags it ON it.tag_id = g.id
        JOIN items i ON i.id = it.item_id WHERE i.state != 'deleted' GROUP BY g.id`,
     )
     .all() as { name: string; n: number }[];

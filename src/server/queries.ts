@@ -128,7 +128,7 @@ export function getItem(db: Db, id: number) {
   if (!row) return null;
   const text = db.$client.prepare(`SELECT body FROM item_text WHERE item_id = ?`).get(id) as { body: string } | undefined;
   const tagNames = db.$client
-    .prepare(`SELECT g.name FROM item_tags it JOIN tags g ON g.id = it.tag_id WHERE it.item_id = ? ORDER BY g.name`)
+    .prepare(`SELECT g.name FROM v_item_tags it JOIN tags g ON g.id = it.tag_id WHERE it.item_id = ? ORDER BY g.name`)
     .pluck()
     .all(id) as string[];
   const error = db.select().from(itemErrors).where(eq(itemErrors.itemId, id)).get();
@@ -138,7 +138,7 @@ export function getItem(db: Db, id: number) {
 export function allTags(db: Db, limit = 200) {
   return db.$client
     .prepare(
-      `SELECT g.name, count(*) AS n FROM tags g JOIN item_tags it ON it.tag_id = g.id JOIN items i ON i.id = it.item_id
+      `SELECT g.name, count(*) AS n FROM tags g JOIN v_item_tags it ON it.tag_id = g.id JOIN items i ON i.id = it.item_id
        WHERE i.state != 'deleted' GROUP BY g.id ORDER BY n DESC LIMIT ?`,
     )
     .all(limit) as { name: string; n: number }[];

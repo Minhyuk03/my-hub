@@ -431,6 +431,7 @@ export function purgeDeleted(db: Db, now: number, retentionDays: number) {
     db.delete(itemTags).where(inArray(itemTags.itemId, ids)).run();
     db.delete(itemLinks).where(inArray(itemLinks.itemId, ids)).run();
     db.delete(itemErrors).where(inArray(itemErrors.itemId, ids)).run();
+    for (const t of ["item_tags_manual", "item_embeddings", "ai_suggestions"]) db.$client.prepare(`DELETE FROM ${t} WHERE item_id IN (${ids.map(() => "?").join(",")})`).run(...ids);
     db.delete(items).where(inArray(items.id, ids)).run();
   }
   // 폴더는 프로젝트 연결이 "폴더 없음" 경고를 보여줄 수 있도록 지우지 않는다
@@ -493,6 +494,9 @@ export function purgeExcluded(db: Db, settings: Settings = getSettings(db)): num
       removeItemText(db, r.id);
       for (const t of [itemTags, itemLinks, itemErrors]) tx.delete(t).where(eq(t.itemId, r.id)).run();
       tx.run(sql`DELETE FROM project_items WHERE item_id = ${r.id}`);
+      tx.run(sql`DELETE FROM item_tags_manual WHERE item_id = ${r.id}`);
+      tx.run(sql`DELETE FROM item_embeddings WHERE item_id = ${r.id}`);
+      tx.run(sql`DELETE FROM ai_suggestions WHERE item_id = ${r.id}`);
       tx.delete(items).where(eq(items.id, r.id)).run();
     }
     const fs_ = db

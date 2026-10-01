@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { index, integer, primaryKey, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
+import { blob, index, integer, primaryKey, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 
 /**
  * 시각은 모두 epoch 밀리초(integer)로 저장한다.
@@ -279,3 +279,47 @@ export const tagStyles = sqliteTable("tag_styles", {
   name: text("name").primaryKey(),
   emoji: text("emoji").notNull(),
 });
+
+// ---------- 로컬 AI (Ollama) ----------
+
+/** 문서 임베딩 (bge-m3). 제목·폴더 경로·본문 앞부분으로 만든다 */
+export const itemEmbeddings = sqliteTable("item_embeddings", {
+  itemId: integer("item_id").primaryKey(),
+  model: text("model").notNull(),
+  /** Float32 벡터 */
+  vector: blob("vector", { mode: "buffer" }).notNull(),
+  /** 임베딩에 쓴 글의 해시. 바뀌면 다시 만든다 */
+  textHash: text("text_hash").notNull(),
+  createdAt: integer("created_at").notNull(),
+});
+
+/** AI 제안. 수락해야만 적용한다. 같은 내용(text_hash)에 대해 거절한 제안은 다시 만들지 않는다 */
+export const aiSuggestions = sqliteTable(
+  "ai_suggestions",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    itemId: integer("item_id").notNull(),
+    kind: text("kind").$type<"tags" | "project">().notNull(),
+    payload: text("payload", { mode: "json" })
+      .$type<{ tags?: string[]; summary?: string; para?: string; projectId?: number; score?: number; neighbors?: number }>()
+      .notNull(),
+    model: text("model").notNull(),
+    textHash: text("text_hash").notNull(),
+    status: text("status").$type<"pending" | "accepted" | "rejected">().notNull().default("pending"),
+    createdAt: integer("created_at").notNull(),
+    decidedAt: integer("decided_at"),
+  },
+  (t) => [uniqueIndex("ai_suggestions_item_kind").on(t.itemId, t.kind), index("ai_suggestions_status").on(t.status, t.kind)],
+);
+
+/** 사용자가 붙인(또는 AI 제안을 수락한) 태그. 본문에서 읽은 태그와 달리 다시 색인해도 지워지지 않는다 */
+export const itemTagsManual = sqliteTable(
+  "item_tags_manual",
+  {
+    itemId: integer("item_id").notNull(),
+    tagId: integer("tag_id").notNull(),
+    origin: text("origin").$type<"ai" | "user">().notNull(),
+    createdAt: integer("created_at").notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.itemId, t.tagId] }), index("item_tags_manual_tag").on(t.tagId)],
+);
