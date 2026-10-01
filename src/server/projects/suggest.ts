@@ -106,6 +106,13 @@ export function skeleton(s: string): string {
   return out.replace(/(.)\1+/g, "$1");
 }
 
+/** 이름이 한글로만(H) 또는 영문으로만(L) 되어 있는지. 섞였거나 숫자뿐이면 null */
+function scriptOf(n: string): "H" | "L" | null {
+  const h = /[가-힣]/.test(n);
+  const l = /[a-z]/i.test(n);
+  return h && !l ? "H" : l && !h ? "L" : null;
+}
+
 // ---------- 동의어 ----------
 export function parseSynonyms(lines: string[]): Map<string, string> {
   const m = new Map<string, string>();
@@ -154,10 +161,11 @@ export type SuggestionDraft = { folderIds: number[]; name: string; reason: strin
 export function computeSuggestions(db: Db): SuggestionDraft[] {
   const syn = parseSynonyms(getSettings(db).synonyms);
   const cands = candidates(db);
-  const groups = new Map<string, { score: number; label: string; ids: Set<number> }>();
-  const add = (key: string, score: number, label: string, id: number) => {
-    const g = groups.get(key) ?? { score, label, ids: new Set<number>() };
+  const groups = new Map<string, { score: number; label: string; ids: Set<number>; scripts: Set<string> }>();
+  const add = (key: string, score: number, label: string, id: number, script?: "H" | "L") => {
+    const g = groups.get(key) ?? { score, label, ids: new Set<number>(), scripts: new Set<string>() };
     g.ids.add(id);
+    if (script) g.scripts.add(script);
     groups.set(key, g);
   };
   const byId = new Map(cands.map((c) => [c.id, c]));
@@ -166,18 +174,24 @@ export function computeSuggestions(db: Db): SuggestionDraft[] {
     add(`norm:${n}`, 100, "이름이 같음", c.id);
     const d = dictKey(c.name, syn);
     if (d) add(`dict:${d}`, 90, "동의어 사전으로 같은 이름", c.id);
+    // 발음 뼈대는 한글 ↔ 영문 비교에만 쓴다 (한글끼리는 글자가 같아야 함: 멘토링 ≠ 모니터링)
     const sk = skeleton(n);
-    if (sk.replace(/\d/g, "").length >= 3) add(`skel:${sk}`, 70, "한글·영문 표기만 다름", c.id);
+    const script = scriptOf(n);
+    if (script && sk.replace(/\d/g, "").length >= 3) add(`skel:${sk}`, 70, "한글·영문 표기만 다름", c.id, script);
   }
   // 일부 일치: 한 단어 폴더 이름이 다른 폴더 이름의 단어와 같음
   // 단어가 그대로 같거나(동의어 포함), 발음 뼈대가 4자 이상 같을 때만. 짧은 뼈대는 우연히 겹치기 쉽다 (tools ≈ 테트라워치)
+  // 색인 키: 글자 그대로("w:") + 발음 뼈대("s:H:"/"s:L:" 한글·영문 구분)
   const tokenKeys = (t: string) => {
     const n = syn.get(normalizeName(t)) ?? normalizeName(t);
     const keys = n.length >= 2 ? [`w:${n}`] : [];
     const sk = skeleton(n);
-    if (sk.replace(/\d/g, "").length >= 4) keys.push(`s:${sk}`);
+    const sc = scriptOf(n);
+    if (sc && sk.replace(/\d/g, "").length >= 4) keys.push(`s:${sc}:${sk}`);
     return keys;
   };
+  // 찾을 때는 반대 문자 체계의 뼈대만 본다
+  const lookupKeys = (t: string) => tokenKeys(t).map((k) => (k.startsWith("s:H:") ? "s:L:" + k.slice(4) : k.startsWith("s:L:") ? "s:H:" + k.slice(4) : k));
   const tokenIndex = new Map<string, Set<number>>();
   for (const c of cands) {
     for (const t of tokens(c.name)) {
@@ -190,7 +204,7 @@ export function computeSuggestions(db: Db): SuggestionDraft[] {
   for (const c of cands) {
     const t = tokens(c.name);
     if (t.length !== 1) continue;
-    for (const k of tokenKeys(t[0])) {
+    for (const k of lookupKeys(t[0])) {
       for (const other of tokenIndex.get(k) ?? []) {
         if (other === c.id) continue;
         add(`part:${c.id}`, 55, `'${c.name}' 이(가) 다른 폴더 이름의 일부`, c.id);
@@ -205,6 +219,7 @@ export function computeSuggestions(db: Db): SuggestionDraft[] {
     const ids = [...g.ids].sort((a, b) => a - b);
     const srcCount = new Set(ids.map((id) => byId.get(id)!.sourceId)).size;
     if (srcCount < 2) continue;
+    if (g.scripts.size > 0 && g.scripts.size < 2) continue; // 발음 뼈대 묶음은 한글·영문이 섞였을 때만
     const members = ids.map((id) => byId.get(id)!);
     const reason = `${g.label}: ` + members.map((m) => `${m.sourceName}/${m.name}`).join(", ");
     // 제안 이름: 한글이 들어간 이름을 우선, 그다음 가장 긴 이름

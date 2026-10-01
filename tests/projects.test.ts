@@ -160,6 +160,8 @@ describe("폴더 이름 기반 연결 제안", () => {
     write(b, "01_미래내일_테트라워치/y.md");
     write(a, "heasarang/z.md");
     write(b, "해사랑 스터디/w.md");
+    write(a, "멘토링/m.md");
+    write(b, "시스템 분석과 모니터링/n.md");
     const s1 = addSource(db, a);
     const s2 = addSource(db, b);
     await runScan(db, s1.id, deps());
@@ -167,6 +169,7 @@ describe("폴더 이름 기반 연결 제안", () => {
     const reasons = computeSuggestions(db).map((x) => x.reason);
     expect(reasons.some((r) => r.includes("tools"))).toBe(false);
     expect(reasons.some((r) => r.includes("heasarang") && r.includes("해사랑"))).toBe(true);
+    expect(reasons.some((r) => r.includes("모니터링"))).toBe(false); // 한글끼리는 발음 뼈대로 묶지 않는다
   });
 
   it("같은 소스 안의 폴더끼리, 흔한 폴더 이름은 제안하지 않는다", async () => {
