@@ -55,3 +55,29 @@ describe("그래프 뷰", () => {
     expect(isSingleEmoji("🇰🇷")).toBe(true);
   });
 });
+
+describe("태그로 모든 파일 잇기", () => {
+  it("태그 있는 문서(노트가 아닌 것)와 AI 제안 태그(점선)도 그래프에 넣는다", async () => {
+    const { testDb, tmpDir, write, addSource, deps } = await import("./helpers");
+    const { runScan } = await import("@/server/sync/scanner");
+    const { buildGraph } = await import("@/server/graph");
+    const { aiSuggestions, items } = await import("@/server/db/schema");
+    const db = testDb();
+    const root = tmpDir();
+    write(root, "노트.md", "#여행 노트");
+    write(root, "보고서.txt", "보고서 본문");
+    write(root, "계획.txt", "계획 본문");
+    const src = addSource(db, root);
+    await runScan(db, src.id, deps());
+    const id = (t: string) => db.select().from(items).all().find((i) => i.path.endsWith(`/${t}.txt`))!.id;
+    for (const [t, tags] of [["보고서", ["여행", "예산"]], ["계획", ["예산", "혼자"]]] as const)
+      db.insert(aiSuggestions).values({ itemId: id(t), kind: "tags", payload: { tags: [...tags], summary: "" }, model: "m", textHash: "h", createdAt: 1 }).run();
+    const plain = buildGraph(db, { includeTags: true });
+    expect(plain.nodes.some((n) => n.itemId === id("보고서"))).toBe(false);
+    const g = buildGraph(db, { includeTags: true, allFiles: true, suggested: true });
+    expect(g.nodes.find((n) => n.itemId === id("보고서"))?.fileKind).toBeTruthy();
+    expect(g.links.filter((l) => l.kind === "suggested")).toHaveLength(3); // 보고서-여행, 보고서-예산, 계획-예산 (혼자는 한 문서뿐이라 뺌)
+    expect(g.nodes.some((n) => n.label === "#혼자")).toBe(false);
+    expect(g.nodes.some((n) => n.label === "#여행")).toBe(true);
+  });
+});

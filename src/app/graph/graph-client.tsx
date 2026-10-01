@@ -102,9 +102,16 @@ function TagPane({ tags, onChange }: { tags: TagMain[]; onChange: () => void }) 
 }
 
 export function GraphClient({ tags, projects }: { tags: TagMain[]; projects: { id: number; name: string }[] }) {
-  const [opts, setOpts] = useState<GraphOptionsState>({ tags: false, files: false, orphans: false, color: "folder", project: "" });
+  const [opts, setOpts] = useState<GraphOptionsState>({ tags: false, files: false, orphans: false, all: false, suggested: false, color: "folder", project: "" });
   const [reloadKey, setReloadKey] = useState(0);
-  const toggle = (k: "tags" | "files" | "orphans") => setOpts((o) => ({ ...o, [k]: !o[k] }));
+  const toggle = (k: "tags" | "files" | "orphans" | "all" | "suggested") =>
+    setOpts((o) => {
+      const next = { ...o, [k]: !o[k] };
+      // 모든 파일·AI 제안은 태그로 잇는 것이라 태그를 함께 켠다
+      if ((k === "all" || k === "suggested") && next[k]) next.tags = true;
+      if (k === "tags" && !next.tags) Object.assign(next, { all: false, suggested: false });
+      return next;
+    });
   return (
     <div className="flex h-full flex-col lg:flex-row">
       <div className="relative h-[65vh] min-h-[420px] flex-1 lg:h-auto">
@@ -118,6 +125,8 @@ export function GraphClient({ tags, projects }: { tags: TagMain[]; projects: { i
               ["tags", "태그"],
               ["files", "첨부파일"],
               ["orphans", "연결 없는 노트"],
+              ["all", "태그 있는 모든 파일 (Notion·문서·PDF, 네모)"],
+              ["suggested", "AI 제안 태그 (수락 전, 점선)"],
             ] as const
           ).map(([k, label]) => (
             <label key={k} className="flex items-center gap-2">

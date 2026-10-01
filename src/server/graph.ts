@@ -17,14 +17,20 @@ export type GraphNode = {
   group: string;
   degree: number;
   emoji?: string;
+  /** 노트가 아닌 문서(Notion·PDF 등)면 그 형식 → 네모로 그린다 */
+  fileKind?: string;
 };
-export type GraphLink = { source: string; target: string; kind: "link" | "tag" };
+export type GraphLink = { source: string; target: string; kind: "link" | "tag" | "suggested" };
 export type GraphOptions = {
   projectId?: number;
   sourceIds?: number[];
   includeTags?: boolean;
   includeAttachments?: boolean;
   includeOrphans?: boolean;
+  /** 태그가 있는 모든 파일(노트가 아닌 문서·Notion·PDF 등)도 점으로 */
+  allFiles?: boolean;
+  /** 아직 수락하지 않은 AI 태그 제안도 점선으로 */
+  suggested?: boolean;
   colorBy?: "folder" | "tag" | "source";
 };
 
@@ -39,7 +45,7 @@ export function tagEmojiMap(db: Db): Map<string, string> {
   return new Map(db.select().from(tagStyles).all().map((t) => [t.name, t.emoji]));
 }
 
-export function buildGraph(db: Db, opts: GraphOptions = {}): { nodes: GraphNode[]; links: GraphLink[]; stats: { notes: number; links: number; tags: number } } {
+export function buildGraph(db: Db, opts: GraphOptions = {}): { nodes: GraphNode[]; links: GraphLink[]; stats: { notes: number; links: number; tags: number; suggested: number } } {
   const c = db.$client;
   const all = c
     .prepare(
@@ -54,8 +60,17 @@ export function buildGraph(db: Db, opts: GraphOptions = {}): { nodes: GraphNode[
     const m = membershipSql(db, opts.projectId);
     allowed = new Set(c.prepare(m.sql).pluck().all(...m.params) as number[]);
   }
+  // 태그 (본문 태그 + 수락한 태그) 와 아직 수락하지 않은 AI 제안 태그
+  const tagRows = opts.includeTags || opts.colorBy === "tag" || opts.allFiles ? (c.prepare(`SELECT it.item_id AS id, g.name FROM v_item_tags it JOIN tags g ON g.id = it.tag_id`).all() as { id: number; name: string }[]) : [];
+  const sugRows = opts.suggested
+    ? (c.prepare(`SELECT item_id AS id, payload FROM ai_suggestions WHERE kind = 'tags' AND status = 'pending'`).all() as { id: number; payload: string }[]).flatMap((r) =>
+        ((JSON.parse(r.payload) as { tags?: string[] }).tags ?? []).map((name) => ({ id: r.id, name: name.normalize("NFC") })),
+      )
+    : [];
+  const tagged = new Set([...tagRows.map((r) => r.id), ...sugRows.map((r) => r.id)]);
   const notes = all.filter(
-    (r) => r.kind === "note" && (!allowed || allowed.has(r.id)) && (!opts.sourceIds?.length || opts.sourceIds.includes(r.sourceId)),
+    (r) =>
+      (r.kind === "note" || (opts.allFiles && tagged.has(r.id))) && (!allowed || allowed.has(r.id)) && (!opts.sourceIds?.length || opts.sourceIds.includes(r.sourceId)),
   );
   const noteIds = new Set(notes.map((n) => n.id));
 
@@ -85,22 +100,23 @@ export function buildGraph(db: Db, opts: GraphOptions = {}): { nodes: GraphNode[
   const links: GraphLink[] = [];
   const noteTags = new Map<number, string[]>();
 
-  if (opts.includeTags || opts.colorBy === "tag") {
-    const rows = c.prepare(`SELECT it.item_id AS id, g.name FROM v_item_tags it JOIN tags g ON g.id = it.tag_id`).all() as { id: number; name: string }[];
-    for (const r of rows) if (noteIds.has(r.id)) noteTags.set(r.id, [...(noteTags.get(r.id) ?? []), r.name]);
-  }
+  for (const r of tagRows) if (noteIds.has(r.id)) noteTags.set(r.id, [...(noteTags.get(r.id) ?? []), r.name]);
+  const sugTags = new Map<number, string[]>();
+  for (const r of sugRows) if (noteIds.has(r.id) && !noteTags.get(r.id)?.includes(r.name)) sugTags.set(r.id, [...(sugTags.get(r.id) ?? []), r.name]);
 
   const groupOf = (r: Row): string => {
     if (opts.colorBy === "source") return r.sourceName;
     if (opts.colorBy === "tag") {
-      const t = noteTags.get(r.id)?.[0];
+      const t = noteTags.get(r.id)?.[0] ?? sugTags.get(r.id)?.[0];
       return t ? mainTagOf(t) : "(태그 없음)";
     }
+    if (/^[a-z]+:\//.test(r.path) || r.kind === "chat") return r.sourceName; // Notion·Drive·AI 대화는 소스 이름으로
     const rel = r.path.slice(r.root.length + 1).split("/");
     return rel.length > 1 ? rel[0].normalize("NFC") : "(최상위)";
   };
 
-  for (const n of notes) nodes.set(`n${n.id}`, { id: `n${n.id}`, type: "note", label: n.title, itemId: n.id, group: groupOf(n), degree: 0 });
+  for (const n of notes)
+    nodes.set(`n${n.id}`, { id: `n${n.id}`, type: "note", label: n.title, itemId: n.id, group: groupOf(n), degree: 0, ...(n.kind !== "note" ? { fileKind: n.kind } : {}) });
 
   // 노트 → 노트 / 첨부파일 링크
   const linkRows = c.prepare(`SELECT item_id AS id, target FROM item_links`).all() as { id: number; target: string }[];
@@ -123,15 +139,29 @@ export function buildGraph(db: Db, opts: GraphOptions = {}): { nodes: GraphNode[
 
   // 노트 → 태그
   if (opts.includeTags) {
-    for (const [id, tags] of noteTags) {
-      for (const t of tags) {
-        const tid = `t${t}`;
-        if (!nodes.has(tid)) nodes.set(tid, { id: tid, type: "tag", label: `#${t}`, tag: t, group: "(태그)", degree: 0, emoji: emoji.get(mainTagOf(t)) });
-        links.push({ source: `n${id}`, target: tid, kind: "tag" });
-      }
-    }
+    const addTag = (id: number, t: string, kind: "tag" | "suggested") => {
+      const tid = `t${t}`;
+      if (!nodes.has(tid)) nodes.set(tid, { id: tid, type: "tag", label: `#${t}`, tag: t, group: "(태그)", degree: 0, emoji: emoji.get(mainTagOf(t)) });
+      links.push({ source: `n${id}`, target: tid, kind });
+    };
+    for (const [id, tags] of noteTags) for (const t of tags) addTag(id, t, "tag");
+    for (const [id, tags] of sugTags) for (const t of tags) addTag(id, t, "suggested");
   }
 
+  // AI 제안으로만 생긴 태그가 문서 하나에만 붙어 있으면 아무것도 잇지 못하므로 뺀다
+  if (opts.suggested) {
+    const cnt = new Map<string, { all: number; real: number }>();
+    for (const l of links) {
+      if (!l.target.startsWith("t")) continue;
+      const x = cnt.get(l.target) ?? { all: 0, real: 0 };
+      x.all++;
+      if (l.kind !== "suggested") x.real++;
+      cnt.set(l.target, x);
+    }
+    const drop = new Set([...cnt].filter(([, x]) => x.real === 0 && x.all < 2).map(([id]) => id));
+    for (const id of drop) nodes.delete(id);
+    for (let i = links.length - 1; i >= 0; i--) if (drop.has(links[i].target)) links.splice(i, 1);
+  }
   for (const l of links) {
     nodes.get(l.source)!.degree++;
     nodes.get(l.target)!.degree++;
@@ -143,7 +173,12 @@ export function buildGraph(db: Db, opts: GraphOptions = {}): { nodes: GraphNode[
   return {
     nodes: list,
     links: kept,
-    stats: { notes: list.filter((n) => n.type === "note").length, links: kept.filter((l) => l.kind === "link").length, tags: list.filter((n) => n.type === "tag").length },
+    stats: {
+      notes: list.filter((n) => n.type === "note").length,
+      links: kept.filter((l) => l.kind === "link").length,
+      tags: list.filter((n) => n.type === "tag").length,
+      suggested: kept.filter((l) => l.kind === "suggested").length,
+    },
   };
 }
 

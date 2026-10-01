@@ -11,6 +11,8 @@ export async function GET(req: NextRequest) {
     includeTags: sp.get("tags") === "1",
     includeAttachments: sp.get("files") === "1",
     includeOrphans: sp.get("orphans") === "1",
+    allFiles: sp.get("all") === "1",
+    suggested: sp.get("suggested") === "1",
     colorBy: colorBy === "tag" || colorBy === "source" ? colorBy : "folder",
   });
   return Response.json(g);

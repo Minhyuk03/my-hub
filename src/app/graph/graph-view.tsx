@@ -8,9 +8,19 @@ import type { GraphLink, GraphNode } from "@/server/graph";
 
 type FGNode = GraphNode & { x?: number; y?: number };
 type FGLink = Omit<GraphLink, "source" | "target"> & { source: string | FGNode; target: string | FGNode };
-type Data = { nodes: FGNode[]; links: FGLink[]; stats: { notes: number; links: number; tags: number } };
+type Data = { nodes: FGNode[]; links: FGLink[]; stats: { notes: number; links: number; tags: number; suggested: number } };
 
-export type GraphOptionsState = { tags: boolean; files: boolean; orphans: boolean; color: "folder" | "tag" | "source"; project: string };
+export type GraphOptionsState = {
+  tags: boolean;
+  files: boolean;
+  orphans: boolean;
+  /** 태그 있는 모든 파일 */
+  all: boolean;
+  /** AI 제안 태그 (점선) */
+  suggested: boolean;
+  color: "folder" | "tag" | "source";
+  project: string;
+};
 
 // 밝은 화면·어두운 화면 모두에서 구분되는 색
 const PALETTE = ["#22c55e", "#3b82f6", "#f59e0b", "#ec4899", "#a855f7", "#14b8a6", "#ef4444", "#84cc16", "#06b6d4", "#f97316"];
@@ -27,7 +37,14 @@ export function GraphView({ opts, reloadKey }: { opts: GraphOptionsState; reload
 
   // 데이터 불러오기
   useEffect(() => {
-    const p = new URLSearchParams({ tags: opts.tags ? "1" : "0", files: opts.files ? "1" : "0", orphans: opts.orphans ? "1" : "0", color: opts.color });
+    const p = new URLSearchParams({
+      tags: opts.tags ? "1" : "0",
+      files: opts.files ? "1" : "0",
+      orphans: opts.orphans ? "1" : "0",
+      all: opts.all ? "1" : "0",
+      suggested: opts.suggested ? "1" : "0",
+      color: opts.color,
+    });
     if (opts.project) p.set("project", opts.project);
     let alive = true;
     fetch(`/api/graph?${p}`)
@@ -94,12 +111,16 @@ export function GraphView({ opts, reloadKey }: { opts: GraphOptionsState; reload
           if (h && (idOf(l.source) === h.id || idOf(l.target) === h.id)) return dark ? "rgba(255,255,255,0.6)" : "rgba(0,0,0,0.5)";
           return linkColor;
         })
+        // AI 제안 태그는 점선
+        .linkLineDash((l) => (l.kind === "suggested" ? [2, 2] : null))
         .linkWidth((l) => (hover.current && (idOf(l.source) === hover.current.id || idOf(l.target) === hover.current.id) ? 1.5 : 0.6))
         .nodeCanvasObject((n, ctx, scale) => {
           const r = radius(n);
           const on = active(n);
           ctx.beginPath();
-          ctx.arc(n.x!, n.y!, r, 0, 2 * Math.PI);
+          // 노트는 동그라미, 노트가 아닌 문서(Notion·PDF 등)는 네모
+          if (n.fileKind) ctx.rect(n.x! - r * 0.9, n.y! - r * 0.9, r * 1.8, r * 1.8);
+          else ctx.arc(n.x!, n.y!, r, 0, 2 * Math.PI);
           ctx.fillStyle = !on ? dim : n.type === "tag" ? (dark ? "#e5e7eb" : "#6b7280") : n.type === "file" ? (dark ? "#9ca3af" : "#9ca3af") : (colorOf.get(n.group) ?? "#9ca3af");
           ctx.fill();
           if (n.type === "tag" && n.emoji && on) {
@@ -186,17 +207,18 @@ export function GraphView({ opts, reloadKey }: { opts: GraphOptionsState; reload
       <div className="absolute bottom-3 left-3 max-w-[60%] space-y-1 rounded-md border bg-background/80 px-3 py-2 text-xs backdrop-blur">
         {data ? (
           <p className="text-muted-foreground">
-            노트 {data.stats.notes.toLocaleString()} · 연결 {data.stats.links.toLocaleString()}
+            {opts.all ? "문서" : "노트"} {data.stats.notes.toLocaleString()} · 연결 {data.stats.links.toLocaleString()}
             {opts.tags && ` · 태그 ${data.stats.tags}`}
+            {opts.suggested && ` · AI 제안 ${data.stats.suggested}개(점선)`}
           </p>
         ) : (
           <p className="text-muted-foreground">불러오는 중…</p>
         )}
         <div className="flex flex-wrap gap-x-3 gap-y-1">
           {groups.slice(0, 10).map(([g, c]) => (
-            <span key={g} className="flex items-center gap-1">
-              <span className="inline-block size-2 rounded-full" style={{ background: c }} />
-              {g}
+            <span key={g} className="flex max-w-48 items-center gap-1" title={g}>
+              <span className="inline-block size-2 shrink-0 rounded-full" style={{ background: c }} />
+              <span className="truncate">{g}</span>
             </span>
           ))}
         </div>
