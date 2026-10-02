@@ -18,6 +18,8 @@ export const DEFAULT_SETTINGS = {
   backupKeepWeekly: 8,
   /** 확장자별 "편집기로 열기" 앱 이름 (open -a) */
   editorByExt: { md: "Visual Studio Code", ts: "Visual Studio Code", js: "Visual Studio Code", py: "Visual Studio Code" } as Record<string, string>,
+  /** 태그 합치기 규칙 (원래 이름 → 합칠 이름). 허브 안에서만 적용, 원본 노트는 그대로 */
+  tagAliases: {} as Record<string, string>,
   /** 폴더 이름 비교용 동의어 ("리뉴얼 = renewal") */
   synonyms: DEFAULT_SYNONYMS as string[],
   /** 외부(Tailscale) 접속을 허용할 로그인 계정 */

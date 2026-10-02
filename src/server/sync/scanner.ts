@@ -12,6 +12,7 @@ import { nfc } from "../search/text";
 import { getSettings, type Settings } from "../settings";
 import { checkAvailability, realMountEnv, type MountEnv } from "../sources/availability";
 import { isExcludedFolder, isExcludedName, isInside, skippedBySource } from "../sources/rules";
+import { aliasAll, tagAliases } from "../tags";
 
 type Source = typeof sources.$inferSelect;
 type Item = typeof items.$inferSelect;
@@ -371,7 +372,8 @@ export function titleOf(p: string): string {
 
 export function replaceTags(db: Db, itemId: number, names: string[]) {
   db.delete(itemTags).where(eq(itemTags.itemId, itemId)).run();
-  for (const n of names) {
+  // 태그 합치기 규칙(설정)을 적용해 저장한다. 원본 노트는 그대로
+  for (const n of aliasAll(tagAliases(db), names)) {
     db.insert(tags).values({ name: n }).onConflictDoNothing().run();
     const t = db.select().from(tags).where(eq(tags.name, n)).get()!;
     db.insert(itemTags).values({ itemId, tagId: t.id }).onConflictDoNothing().run();

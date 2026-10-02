@@ -9,6 +9,7 @@ import crypto from "node:crypto";
 import { and, eq, inArray } from "drizzle-orm";
 import type { Db } from "../db";
 import { aiSuggestions, itemEmbeddings, itemTagsManual, projects, tags } from "../db/schema";
+import { aliasAll, tagAliases } from "../tags";
 import { mainTagOf } from "../graph";
 import { membershipSql, setItemRule } from "../projects";
 import { getSettings } from "../settings";
@@ -276,7 +277,7 @@ export function acceptTagSuggestion(db: Db, id: number, selected: string[], now 
   const s = db.select().from(aiSuggestions).where(eq(aiSuggestions.id, id)).get();
   if (!s || s.kind !== "tags") throw new Error("제안을 찾을 수 없습니다.");
   const allowed = new Set(s.payload.tags ?? []);
-  for (const name of selected.filter((t) => allowed.has(t))) {
+  for (const name of aliasAll(tagAliases(db), selected.filter((t) => allowed.has(t)))) {
     db.insert(tags).values({ name }).onConflictDoNothing().run();
     const t = db.select().from(tags).where(eq(tags.name, name)).get()!;
     db.insert(itemTagsManual).values({ itemId: s.itemId, tagId: t.id, origin: "ai", createdAt: now }).onConflictDoNothing().run();

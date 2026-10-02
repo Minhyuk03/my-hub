@@ -14,6 +14,7 @@ import { PolicyToggle } from "@/components/policy-toggle";
 import { denyList } from "@/server/chat/policy";
 import { hasKey } from "@/server/chat/llm";
 import { saveChatSettings } from "./chat-actions";
+import { saveTagAliases } from "./tag-actions";
 import { connectCalendar, disconnectCalendar, refreshCalendar, saveCalendarHidden } from "./calendar-actions";
 import type { CalendarSnapshot } from "@/server/calendar";
 import { runtime } from "@/server/db/schema";
@@ -287,6 +288,32 @@ export default async function SettingsPage({ searchParams }: PageProps<"/setting
               <FigmaTargetForm />
             </>
           )}
+        </CardContent>
+      </Card>
+
+      <Card id="tags">
+        <CardHeader>
+          <CardTitle>태그 합치기</CardTitle>
+          <CardDescription>
+            비슷한 태그를 허브 안에서 하나로 봅니다 (검색·그래프·태그 목록). Obsidian·Notion 원본 노트는 바꾸지 않습니다. 한 줄에 &ldquo;원래 태그 = 합칠 태그&rdquo;, 하위 태그도
+            함께 옮겨집니다 (수업/자료구조 → 학교/자료구조). 줄을 지우면 다음 다시 색인 때 원래 이름으로 돌아옵니다.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <form action={saveTagAliases} className="space-y-2">
+            <textarea
+              name="aliases"
+              rows={Math.max(3, Object.keys(s.tagAliases).length + 1)}
+              defaultValue={Object.entries(s.tagAliases)
+                .map(([a, b]) => `${a} = ${b}`)
+                .join("\n")}
+              placeholder={"수업 = 학교\n코드 = 개발"}
+              className="w-full rounded-md border bg-background p-2 font-mono text-sm"
+            />
+            <Button type="submit" size="sm">
+              저장하고 합치기
+            </Button>
+          </form>
         </CardContent>
       </Card>
 

@@ -3,6 +3,7 @@ import { eq } from "drizzle-orm";
 import type { Db } from "./db";
 import { tagStyles } from "./db/schema";
 import { membershipSql } from "./projects";
+import { aliasAll, tagAliases } from "./tags";
 
 /**
  * 그래프 뷰 데이터: 노트는 점, [[위키링크]]는 선. 태그를 켜면 태그도 점이 되고 노트와 이어진다.
@@ -62,9 +63,10 @@ export function buildGraph(db: Db, opts: GraphOptions = {}): { nodes: GraphNode[
   }
   // 태그 (본문 태그 + 수락한 태그) 와 아직 수락하지 않은 AI 제안 태그
   const tagRows = opts.includeTags || opts.colorBy === "tag" || opts.allFiles ? (c.prepare(`SELECT it.item_id AS id, g.name FROM v_item_tags it JOIN tags g ON g.id = it.tag_id`).all() as { id: number; name: string }[]) : [];
+  const aliases = tagAliases(db);
   const sugRows = opts.suggested
     ? (c.prepare(`SELECT item_id AS id, payload FROM ai_suggestions WHERE kind = 'tags' AND status = 'pending'`).all() as { id: number; payload: string }[]).flatMap((r) =>
-        ((JSON.parse(r.payload) as { tags?: string[] }).tags ?? []).map((name) => ({ id: r.id, name: name.normalize("NFC") })),
+        aliasAll(aliases, (JSON.parse(r.payload) as { tags?: string[] }).tags ?? []).map((name) => ({ id: r.id, name })),
       )
     : [];
   const tagged = new Set([...tagRows.map((r) => r.id), ...sugRows.map((r) => r.id)]);
