@@ -3,7 +3,7 @@
 import { redirect } from "next/navigation";
 import { refresh } from "next/cache";
 import { getDb } from "@/server/db";
-import type { ProjectStatus } from "@/server/db/schema";
+import type { ProjectKind, ProjectStatus } from "@/server/db/schema";
 import {
   clearItemRule,
   createProject,
@@ -15,12 +15,15 @@ import {
   unlinkFolder,
   updateProject,
 } from "@/server/projects";
-import { importPara } from "@/server/projects/para";
+import { importPara, PARA_DIRS } from "@/server/projects/para";
 import { acceptSuggestion, rejectSuggestion } from "@/server/projects/suggest";
 import { enqueue } from "@/server/sources/manage";
 
+const KINDS = ["project", "area", "resource"] as const;
+const kindOf = (v: FormDataEntryValue | null): ProjectKind => (KINDS.includes(String(v) as ProjectKind) ? (String(v) as ProjectKind) : "project");
+
 export async function createProjectAction(form: FormData) {
-  const p = createProject(getDb(), String(form.get("name") ?? ""));
+  const p = createProject(getDb(), String(form.get("name") ?? ""), { kind: kindOf(form.get("kind")) });
   redirect(`/projects/${p.id}`);
 }
 
@@ -29,6 +32,7 @@ export async function saveProjectAction(id: number, form: FormData) {
     name: String(form.get("name") ?? ""),
     memo: String(form.get("memo") ?? ""),
     status: String(form.get("status") ?? "active") as ProjectStatus,
+    ...(form.get("kind") ? { kind: kindOf(form.get("kind")) } : {}),
   });
   refresh();
 }
@@ -80,8 +84,9 @@ export async function refreshSuggestionsAction() {
 
 export async function importParaAction(form: FormData) {
   const ids = form.getAll("folder").map(Number).filter(Boolean);
-  importPara(getDb(), ids);
-  redirect("/projects");
+  const kind = kindOf(form.get("kind"));
+  importPara(getDb(), ids, PARA_DIRS[kind], kind);
+  redirect(`/projects?tab=${kind}`);
 }
 
 /** 홈 "쉬고 있는 프로젝트" 버튼 */

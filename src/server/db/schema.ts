@@ -188,12 +188,15 @@ export const runtime = sqliteTable("runtime", {
 // ---------- Phase 2: 프로젝트 ----------
 
 export type ProjectStatus = "active" | "on_hold" | "done";
+/** PARA: 프로젝트(끝이 있는 일) · 영역(끝이 없는 책임) · 자료(관심 주제). 보관은 상태(완료·보류)로 나타낸다 */
+export type ProjectKind = "project" | "area" | "resource";
 export type AddedBy = "user" | "import" | "suggestion";
 
 export const projects = sqliteTable("projects", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   name: text("name").notNull(),
   status: text("status").$type<ProjectStatus>().notNull().default("active"),
+  kind: text("kind").$type<ProjectKind>().notNull().default("project"),
   memo: text("memo").notNull().default(""),
   /** 외부 AI 전송 정책 (Phase 5에서 사용) */
   externalPolicy: text("external_policy").$type<"allow" | "deny">().notNull().default("allow"),

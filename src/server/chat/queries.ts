@@ -27,8 +27,9 @@ export function deleteThread(db: Db, id: number) {
 export function scopeLabel(db: Db, scope: ChatScope): { label: string; items?: { id: number; title: string }[] } {
   if (scope.kind === "all") return { label: "허브 전체" };
   if (scope.kind === "project") {
-    const p = db.select({ name: projects.name }).from(projects).where(eq(projects.id, scope.projectId)).get();
-    return { label: `프로젝트: ${p?.name ?? "(삭제됨)"}` };
+    const p = db.select({ name: projects.name, kind: projects.kind }).from(projects).where(eq(projects.id, scope.projectId)).get();
+    const kind = p?.kind === "area" ? "영역" : p?.kind === "resource" ? "자료" : "프로젝트";
+    return { label: `${kind}: ${p?.name ?? "(삭제됨)"}` };
   }
   const list = scope.itemIds.length ? db.select({ id: items.id, title: items.title }).from(items).where(inArray(items.id, scope.itemIds)).all() : [];
   return { label: `선택한 문서 ${list.length}개`, items: list };

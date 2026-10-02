@@ -1,0 +1,1 @@
+ALTER TABLE `projects` ADD `kind` text DEFAULT 'project' NOT NULL;

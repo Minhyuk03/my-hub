@@ -1,21 +1,21 @@
 import { and, desc, eq, inArray } from "drizzle-orm";
 import type { Db } from "../db";
-import { folders, projectFolders, projectItems, projects, sources, type AddedBy, type ProjectStatus } from "../db/schema";
+import { folders, projectFolders, projectItems, projects, sources, type AddedBy, type ProjectKind, type ProjectStatus } from "../db/schema";
 
 type Project = typeof projects.$inferSelect;
 
-export function createProject(db: Db, name: string, opts: { memo?: string; status?: ProjectStatus } = {}): Project {
+export function createProject(db: Db, name: string, opts: { memo?: string; status?: ProjectStatus; kind?: ProjectKind } = {}): Project {
   const clean = name.trim().normalize("NFC");
   if (!clean) throw new Error("프로젝트 이름을 입력하세요.");
   const now = Date.now();
   return db
     .insert(projects)
-    .values({ name: clean, memo: opts.memo ?? "", status: opts.status ?? "active", createdAt: now, updatedAt: now })
+    .values({ name: clean, memo: opts.memo ?? "", status: opts.status ?? "active", kind: opts.kind ?? "project", createdAt: now, updatedAt: now })
     .returning()
     .get();
 }
 
-export function updateProject(db: Db, id: number, patch: Partial<Pick<Project, "name" | "memo" | "status">>) {
+export function updateProject(db: Db, id: number, patch: Partial<Pick<Project, "name" | "memo" | "status" | "kind">>) {
   const p = { ...patch, updatedAt: Date.now() };
   if (p.name !== undefined) {
     p.name = p.name.trim().normalize("NFC");
@@ -183,13 +183,17 @@ export function projectsForItem(db: Db, itemId: number): { id: number; name: str
   return out;
 }
 
-export function projectList(db: Db, status?: ProjectStatus) {
+/** PARA 탭: 프로젝트·영역·자료는 진행중인 것, 보관은 완료·보류(종류 상관없이) */
+export type ParaTab = ProjectKind | "archive";
+export function projectList(db: Db, filter?: ProjectStatus | { tab: ParaTab }) {
   const rows = db
     .select()
     .from(projects)
-    .where(status ? eq(projects.status, status) : undefined)
     .orderBy(desc(projects.updatedAt))
-    .all();
+    .all()
+    .filter((p) =>
+      !filter ? true : typeof filter === "string" ? p.status === filter : filter.tab === "archive" ? p.status !== "active" : p.status === "active" && p.kind === filter.tab,
+    );
   const now = Date.now();
   return rows.map((p) => {
     const recent = projectItemList(db, p.id, { since: now - 14 * 86400_000, limit: 1 });
@@ -201,7 +205,7 @@ export function projectList(db: Db, status?: ProjectStatus) {
 
 /** 홈 "이어서 작업하기": 최근 2주 수정이 많은 진행중 프로젝트 */
 export function activeProjects(db: Db, limit = 5) {
-  return projectList(db, "active")
+  return projectList(db, { tab: "project" })
     .filter((p) => p.recentCount > 0)
     .sort((a, b) => b.recentCount - a.recentCount || (b.lastModified ?? 0) - (a.lastModified ?? 0))
     .slice(0, limit);

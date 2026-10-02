@@ -154,3 +154,29 @@ describe("소스별 확장자 제한 (Claude Code 세션은 .jsonl 만)", () => 
     expect(fs.existsSync(path.join(root, "memory/MEMORY.md"))).toBe(true);
   });
 });
+
+describe("PARA: 프로젝트·영역·자료·보관", () => {
+  it("탭별로 나뉘고, 영역·자료는 쉬는 프로젝트 알림에서 빠지며, Obsidian 2. Areas 를 영역으로 가져온다", async () => {
+    const { projectList } = await import("@/server/projects");
+    const { previewParaImport, importPara } = await import("@/server/projects/para");
+    const db = testDb();
+    const root = tmpDir();
+    const old = write(root, "2. Areas/진로/메모.md", "진로 메모");
+    write(root, "2. Areas/보안/메모.md", "보안 메모");
+    fs.utimesSync(old, new Date(Date.now() - 90 * DAY), new Date(Date.now() - 90 * DAY));
+    const src = addSource(db, root, { kind: "obsidian" });
+    await runScan(db, src.id, deps());
+    const areas = path.join(root, "2. Areas");
+    expect(previewParaImport(db, areas).map((r) => r.name).sort()).toEqual(["보안", "진로"]);
+    importPara(db, previewParaImport(db, areas).map((r) => r.folderId), areas, "area");
+    const p = createProject(db, "끝난 일", { kind: "project" });
+    updateProject(db, p.id, { status: "done" });
+    createProject(db, "개발", { kind: "resource" });
+    expect(projectList(db, { tab: "area" }).map((x) => x.name).sort()).toEqual(["보안", "진로"]);
+    expect(projectList(db, { tab: "resource" }).map((x) => x.name)).toEqual(["개발"]);
+    expect(projectList(db, { tab: "archive" }).map((x) => x.name)).toEqual(["끝난 일"]);
+    expect(projectList(db, { tab: "project" })).toHaveLength(0);
+    // 90일 넘게 안 바뀐 영역이 있어도 알리지 않는다
+    expect(staleProjects(db)).toHaveLength(0);
+  });
+});

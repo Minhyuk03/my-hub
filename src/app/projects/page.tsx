@@ -6,21 +6,34 @@ import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { relTime, shortPath } from "@/lib/format";
-import { PROJECT_STATUS_LABEL } from "@/lib/project-labels";
+import { PROJECT_KIND_LABEL, PROJECT_STATUS_LABEL } from "@/lib/project-labels";
 import { getDb } from "@/server/db";
-import type { ProjectStatus } from "@/server/db/schema";
-import { projectList } from "@/server/projects";
+import { projectList, type ParaTab } from "@/server/projects";
 import { pendingSuggestions } from "@/server/projects/suggest";
 import { acceptSuggestionAction, createProjectAction, refreshSuggestionsAction, rejectSuggestionAction, staleAction } from "./actions";
 import { staleProjects } from "@/server/projects/stale";
 import { getSettings } from "@/server/settings";
 
+const PARA_TABS: [ParaTab, string, string][] = [
+  ["project", "프로젝트", "끝이 있는 일. 마감이나 목표가 있는 것 (진행중)"],
+  ["area", "영역", "끝이 없이 꾸준히 챙기는 책임 범위 (진로, 건강, 학교 생활 …)"],
+  ["resource", "자료", "관심 주제와 참고 자료 (개발, 여행, 맥 세팅 …)"],
+  ["archive", "보관", "완료하거나 보류한 것 (종류 상관없이)"],
+];
+
 export default async function ProjectsPage({ searchParams }: PageProps<"/projects">) {
   await connection();
   const sp = await searchParams;
-  const status = (typeof sp.status === "string" && sp.status in PROJECT_STATUS_LABEL ? sp.status : undefined) as ProjectStatus | undefined;
+  // PARA 탭 (예전 ?status= 주소도 받는다: 완료·보류 → 보관)
+  const tab: ParaTab =
+    typeof sp.tab === "string" && ["project", "area", "resource", "archive"].includes(sp.tab)
+      ? (sp.tab as ParaTab)
+      : sp.status === "done" || sp.status === "on_hold"
+        ? "archive"
+        : "project";
   const db = getDb();
-  const list = projectList(db, status);
+  const list = projectList(db, { tab });
+  const counts = Object.fromEntries((["project", "area", "resource", "archive"] as const).map((t) => [t, projectList(db, { tab: t }).length]));
   const suggestions = pendingSuggestions(db);
   const stale = staleProjects(db);
   const staleDays = getSettings(db).staleProjectDays;
@@ -28,25 +41,34 @@ export default async function ProjectsPage({ searchParams }: PageProps<"/project
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-2">
-        <h1 className="text-xl font-semibold">프로젝트</h1>
-        <nav className="flex gap-1 text-sm">
-          {[["", "전체"], ...Object.entries(PROJECT_STATUS_LABEL)].map(([k, label]) => (
-            <Link key={k} href={k ? `/projects?status=${k}` : "/projects"} className={buttonVariants({ variant: (status ?? "") === k ? "secondary" : "ghost", size: "sm" })}>
-              {label}
+        <h1 className="text-xl font-semibold">PARA</h1>
+        <nav className="flex flex-wrap gap-1 text-sm">
+          {PARA_TABS.map(([k, label, hint]) => (
+            <Link key={k} href={`/projects?tab=${k}`} title={hint} className={buttonVariants({ variant: tab === k ? "secondary" : "ghost", size: "sm" })}>
+              {label} <span className="text-xs text-muted-foreground">{counts[k]}</span>
             </Link>
           ))}
         </nav>
-        <Link href="/projects/import" className={buttonVariants({ variant: "outline", size: "sm", className: "ml-auto" })}>
-          Obsidian 1. Projects 가져오기
+        <Link href={`/projects/import?kind=${tab === "archive" ? "project" : tab}`} className={buttonVariants({ variant: "outline", size: "sm", className: "ml-auto" })}>
+          Obsidian 에서 가져오기
         </Link>
       </div>
 
-      <form action={createProjectAction} className="flex max-w-md gap-2">
-        <Input name="name" placeholder="새 프로젝트 이름" required />
+      <p className="text-sm text-muted-foreground">{PARA_TABS.find(([k]) => k === tab)![2]}</p>
+
+      <form action={createProjectAction} className="flex max-w-lg gap-2">
+        <select name="kind" defaultValue={tab === "archive" ? "project" : tab} className="h-9 rounded-md border bg-background px-2 text-sm">
+          {Object.entries(PROJECT_KIND_LABEL).map(([k, v]) => (
+            <option key={k} value={k}>
+              {v}
+            </option>
+          ))}
+        </select>
+        <Input name="name" placeholder="새 이름" required />
         <Button type="submit">만들기</Button>
       </form>
 
-      {stale.length > 0 && !status && (
+      {stale.length > 0 && tab === "project" && (
         <Card id="stale">
           <CardHeader>
             <CardTitle>쉬고 있는 프로젝트 ({stale.length})</CardTitle>
@@ -84,7 +106,7 @@ export default async function ProjectsPage({ searchParams }: PageProps<"/project
         </Card>
       )}
 
-      {suggestions.length > 0 && (
+      {suggestions.length > 0 && tab !== "archive" && (
         <Card>
           <CardHeader>
             <CardTitle>같은 프로젝트로 묶을까요?</CardTitle>
@@ -130,11 +152,12 @@ export default async function ProjectsPage({ searchParams }: PageProps<"/project
       )}
 
       <div className="grid gap-3 md:grid-cols-2">
-        {!list.length && <p className="text-sm text-muted-foreground">프로젝트가 없습니다. 위에서 만들거나, 제안을 수락하거나, Obsidian에서 가져오세요.</p>}
+        {!list.length && <p className="text-sm text-muted-foreground">아직 없습니다. 위에서 만들거나, 제안을 수락하거나, Obsidian 에서 가져오세요.</p>}
         {list.map((p) => (
           <Link key={p.id} href={`/projects/${p.id}`} className="rounded-lg border p-4 hover:bg-muted">
             <div className="flex items-center gap-2">
               <span className="truncate font-medium">{p.name}</span>
+              {tab === "archive" && <Badge variant="outline">{PROJECT_KIND_LABEL[p.kind]}</Badge>}
               <Badge variant={p.status === "active" ? "secondary" : "outline"}>{PROJECT_STATUS_LABEL[p.status]}</Badge>
               <span className="ml-auto text-xs text-muted-foreground">{relTime(p.lastModified)}</span>
             </div>

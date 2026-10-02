@@ -7,7 +7,7 @@ import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { shortPath } from "@/lib/format";
-import { PROJECT_STATUS_LABEL } from "@/lib/project-labels";
+import { PROJECT_KIND_LABEL, PROJECT_STATUS_LABEL } from "@/lib/project-labels";
 import { getDb } from "@/server/db";
 import { projects } from "@/server/db/schema";
 import { excludedItems, projectFolderList, projectItemList } from "@/server/projects";
@@ -54,6 +54,13 @@ export default async function ProjectPage({ params, searchParams }: PageProps<"/
       <form action={saveProjectAction.bind(null, p.id)} className="space-y-2">
         <div className="flex flex-wrap items-center gap-2">
           <Input name="name" defaultValue={p.name} className="h-10 max-w-md text-lg font-semibold" />
+          <select name="kind" defaultValue={p.kind} className="h-10 rounded-md border bg-background px-2 text-sm" title="PARA 종류">
+            {Object.entries(PROJECT_KIND_LABEL).map(([k, v]) => (
+              <option key={k} value={k}>
+                {v}
+              </option>
+            ))}
+          </select>
           <select name="status" defaultValue={p.status} className="h-10 rounded-md border bg-background px-2 text-sm">
             {Object.entries(PROJECT_STATUS_LABEL).map(([k, v]) => (
               <option key={k} value={k}>

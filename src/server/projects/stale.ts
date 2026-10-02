@@ -1,5 +1,5 @@
 /**
- * 오래 쉬고 있는 프로젝트 알림: "진행중"인데 연결된 파일이 N일 넘게 바뀌지 않은 프로젝트
+ * 오래 쉬고 있는 프로젝트 알림: 종류가 프로젝트이고 "진행중"인데 연결된 파일이 N일 넘게 바뀌지 않은 프로젝트
  * "알리지 않기"를 누르면 그 뒤 N일 동안 다시 띄우지 않는다 (settings.staleSnooze)
  */
 import type { Db } from "../db";
@@ -11,7 +11,8 @@ export function staleProjects(db: Db, now = Date.now()) {
   const days = s.staleProjectDays;
   if (!days) return [];
   const cut = now - days * 86400_000;
-  return projectList(db, "active")
+  // 끝이 없는 영역·자료는 "쉬고 있다"고 알리지 않는다
+  return projectList(db, { tab: "project" })
     .filter((p) => p.itemCount > 0)
     .map((p) => ({ ...p, last: p.lastModified ?? p.updatedAt }))
     .filter((p) => p.last < cut && (s.staleSnooze[String(p.id)] ?? 0) < now)

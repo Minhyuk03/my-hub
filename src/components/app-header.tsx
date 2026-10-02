@@ -5,7 +5,7 @@ import { NavButtons } from "./nav-buttons";
 
 const NAV = [
   { href: "/graph", label: "그래프" },
-  { href: "/projects", label: "프로젝트" },
+  { href: "/projects", label: "PARA" },
   { href: "/chat", label: "AI 채팅" },
   { href: "/ai", label: "AI 정리" },
   { href: "/status", label: "동기화 상태" },
