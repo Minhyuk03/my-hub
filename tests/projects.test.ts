@@ -220,3 +220,37 @@ describe("Obsidian 1. Projects 가져오기", () => {
     expect(names).toEqual(["허브 만들기"]);
   });
 });
+
+describe("묶음 합치기", () => {
+  it("폴더·개별 항목·채팅 범위·타일·메모를 옮기고 원래 묶음은 지운다 (파일은 그대로)", async () => {
+    const { mergeProjects, createProject, linkFolder, setItemRule, updateProject, membershipSql } = await import("@/server/projects");
+    const { addTile, tiles } = await import("@/server/home");
+    const { chatThreads, folders: F, items: I, projects } = await import("@/server/db/schema");
+    const db = testDb();
+    const root = tmpDir();
+    write(root, "가/a.md", "a");
+    write(root, "나/b.md", "b");
+    write(root, "c.md", "c");
+    const src = addSource(db, root);
+    await runScan(db, src.id, deps());
+    const fid = (n: string) => db.select().from(F).all().find((f) => f.path === path.join(root, n))!.id;
+    const iid = (n: string) => db.select().from(I).all().find((i) => i.path === path.join(root, n))!.id;
+    const a = createProject(db, "카메라 기능");
+    const b = createProject(db, "카메라 기종 비교");
+    updateProject(db, b.id, { memo: "비교표" });
+    linkFolder(db, a.id, fid("가"));
+    linkFolder(db, b.id, fid("가"));
+    linkFolder(db, b.id, fid("나"));
+    setItemRule(db, b.id, iid("c.md"), "include");
+    addTile(db, "project", String(b.id));
+    db.insert(chatThreads).values({ title: "t", scope: { kind: "project", projectId: b.id }, createdAt: 1, updatedAt: 1 }).run();
+    mergeProjects(db, [b.id], a.id);
+    const m = membershipSql(db, a.id);
+    expect((db.$client.prepare(m.sql).pluck().all(...m.params) as number[]).length).toBe(3);
+    expect(db.select().from(projects).all().map((p) => p.name)).toEqual(["카메라 기능"]);
+    expect(db.select().from(projects).get()!.memo).toMatch("[카메라 기종 비교] 비교표");
+    expect(tiles(db).find((t) => t.kind === "project")?.href).toBe(`/projects/${a.id}`);
+    expect(db.select().from(chatThreads).get()!.scope).toEqual({ kind: "project", projectId: a.id });
+    expect(fs.existsSync(path.join(root, "나/b.md"))).toBe(true);
+  });
+});

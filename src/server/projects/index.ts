@@ -229,3 +229,37 @@ export function findFolders(db: Db, query: string, limit = 30) {
 export function projectsByIds(db: Db, ids: number[]) {
   return ids.length ? db.select().from(projects).where(inArray(projects.id, ids)).all() : [];
 }
+
+/**
+ * 여러 묶음(프로젝트·영역·자료)을 하나로 합친다. 실제 파일은 건드리지 않는다.
+ * 폴더 연결·개별 항목 규칙·AI 제안·폴더 이름 제안·채팅 범위·즐겨찾기 타일을 합칠 곳으로 옮기고, 메모는 이어 붙인 뒤 원래 묶음을 지운다.
+ */
+export function mergeProjects(db: Db, fromIds: number[], intoId: number) {
+  const c = db.$client;
+  const into = db.select().from(projects).where(eq(projects.id, intoId)).get();
+  if (!into) throw new Error("합칠 곳을 찾을 수 없습니다.");
+  db.transaction(() => {
+    for (const fromId of fromIds.filter((id) => id !== intoId)) {
+      const from = db.select().from(projects).where(eq(projects.id, fromId)).get();
+      if (!from) continue;
+      // 폴더 연결 (같은 폴더가 이미 있으면 하위 폴더 포함 쪽을 따른다)
+      for (const l of db.select().from(projectFolders).where(eq(projectFolders.projectId, fromId)).all()) {
+        const ex = db.select().from(projectFolders).where(and(eq(projectFolders.projectId, intoId), eq(projectFolders.folderId, l.folderId))).get();
+        if (!ex) db.insert(projectFolders).values({ projectId: intoId, folderId: l.folderId, includeSubfolders: l.includeSubfolders, addedBy: l.addedBy, createdAt: l.createdAt }).run();
+        else if (l.includeSubfolders && !ex.includeSubfolders) db.update(projectFolders).set({ includeSubfolders: true }).where(eq(projectFolders.id, ex.id)).run();
+      }
+      // 개별 항목 규칙 (합칠 곳에 이미 규칙이 있으면 그쪽을 따른다)
+      for (const r of db.select().from(projectItems).where(eq(projectItems.projectId, fromId)).all())
+        db.insert(projectItems).values({ ...r, projectId: intoId }).onConflictDoNothing().run();
+      c.prepare(`UPDATE ai_suggestions SET payload = json_set(payload, '$.projectId', ?) WHERE kind = 'project' AND json_extract(payload, '$.projectId') = ?`).run(intoId, fromId);
+      c.prepare(`UPDATE project_suggestions SET project_id = ? WHERE project_id = ?`).run(intoId, fromId);
+      c.prepare(`UPDATE chat_threads SET scope = json_set(scope, '$.projectId', ?) WHERE json_extract(scope, '$.kind') = 'project' AND json_extract(scope, '$.projectId') = ?`).run(intoId, fromId);
+      const hasTile = c.prepare(`SELECT 1 FROM shortcuts WHERE kind = 'project' AND target = ?`).get(String(intoId));
+      if (hasTile) c.prepare(`DELETE FROM shortcuts WHERE kind = 'project' AND target = ?`).run(String(fromId));
+      else c.prepare(`UPDATE shortcuts SET target = ? WHERE kind = 'project' AND target = ?`).run(String(intoId), String(fromId));
+      const memo = [db.select().from(projects).where(eq(projects.id, intoId)).get()!.memo, from.memo.trim() ? `[${from.name}] ${from.memo.trim()}` : ""].filter(Boolean).join("\n\n");
+      db.update(projects).set({ memo, updatedAt: Date.now() }).where(eq(projects.id, intoId)).run();
+      db.delete(projects).where(eq(projects.id, fromId)).run();
+    }
+  });
+}
