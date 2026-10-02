@@ -38,13 +38,14 @@ npm run service:uninstall  # 등록 해제 (데이터·백업은 그대로)
 | 주소 | 누가 | 조건 |
 |---|---|---|
 | `http://127.0.0.1:3000` | Mac mini 본인 | 기본은 없음. 설정의 "Mac mini 에서 접속할 때도 패스코드 요구"를 켜면 패스코드(같은 Mac 의 다른 프로그램·다른 계정 차단). Finder 열기·보안 설정은 여기서만 |
-| `https://mh-macmini-1.taile87d89.ts.net` | 아이폰·노트북 (Tailscale) | 허용 목록의 Tailscale 계정 + 앱 패스코드 (기기마다 한 번, 90일 유지) |
+| `https://mh-macmini-1.talpa-nunki.ts.net` | 아이폰·노트북 (Tailscale) | 허용 목록의 Tailscale 계정 + 앱 패스코드 (기기마다 한 번, 90일 유지) |
 
 - 웹 서버(`server.ts`)는 127.0.0.1 의 3000(본인)·3001(Tailscale 전용) 두 포트만 엽니다. `tailscale serve` 가 HTTPS 를 3001 로 넘깁니다. 공용 인터넷에는 공개하지 않습니다.
 - 어느 포트로 들어왔는지는 서버가 소켓 기준으로 정합니다. 3000 으로 온 요청의 Tailscale 헤더는 지우고 무시합니다.
 - 허용 목록·패스코드는 설정 화면(Mac mini 에서만 보임)에서 바꿉니다. 패스코드는 5번 틀리면 10분 잠깁니다.
 - 보안 헤더(`securityHeaders`, `server.ts` 에서 모든 응답에): `X-Frame-Options: DENY`(원본 파일 보기만 `SAMEORIGIN`), `nosniff`, `Referrer-Policy: same-origin`, `Permissions-Policy`. `X-Powered-By` 는 끔.
 - 페이지 CSP(`src/proxy.ts` + `pageCsp`): 요청마다 nonce 를 만들어 Next.js 스크립트와 레이아웃의 인라인 스크립트에만 허용(`'strict-dynamic'`), `frame-ancestors 'none'`, `object-src 'none'`. 스타일은 style 속성 때문에 인라인 허용, 이미지는 북마크 아이콘 때문에 https 허용. 잠금 화면은 스크립트 없는 별도 CSP.
+- Tailscale 주소는 웹 서버가 `tailscale status` 로 1분마다 읽는다(`HUB_TAILSCALE_HOST`, 마지막 값은 `tailscale-host` 파일). 관리 화면에서 기기·tailnet 이름을 바꾸면 코드는 그대로 두고 `tailscale serve reset` 후 `tailscale serve --bg http://127.0.0.1:3001` 만 다시 하면 된다. (Tailscale 앱의 명령은 `TERM` 이 있어야 launchd 에서 동작한다)
 - Tailscale 설정 되돌리기: `/Applications/Tailscale.app/Contents/MacOS/Tailscale serve reset`
 
 ## 화면

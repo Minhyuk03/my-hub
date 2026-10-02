@@ -13,7 +13,8 @@ import next from "next";
 import { DATA_DIR } from "@/lib/config";
 import { openDb } from "@/server/db";
 import { AttemptLimiter, createSession, decide, sanitizeHeaders, securityHeaders, sessionCookie, verifyPasscode, type AuthConfig, type Listener } from "@/server/http/auth";
-import { TAILSCALE_HOST } from "@/server/http/local";
+import { tailscaleHost } from "@/server/http/local";
+import { tailscaleSelf } from "@/server/http/tailscale";
 import { getSettings } from "@/server/settings";
 
 const dev = process.env.NODE_ENV !== "production";
@@ -41,6 +42,30 @@ function authConfig(): AuthConfig {
   return cfgCache.cfg;
 }
 const limiter = new AttemptLimiter();
+
+/**
+ * 이 Mac 의 Tailscale 주소(MagicDNS)를 읽어 둔다. 이름을 바꾸면 1분 안에 따라간다.
+ * Tailscale 이 잠시 응답하지 않아도 마지막으로 알던 주소(파일)를 쓴다.
+ */
+const HOST_FILE = path.join(DATA_DIR, "tailscale-host");
+function refreshTailscaleHost() {
+  if (process.env.HUB_TAILSCALE_HOST_FIXED) return;
+  const self = tailscaleSelf();
+  const now = self?.dnsName;
+  if (!self) console.error("> Tailscale 주소를 읽지 못함 (tailscale status 실패)");
+  if (now && now.endsWith(".ts.net")) {
+    if (now !== process.env.HUB_TAILSCALE_HOST) {
+      if (process.env.HUB_TAILSCALE_HOST) console.log(`> Tailscale 주소 바뀜: ${process.env.HUB_TAILSCALE_HOST} → ${now}`);
+      process.env.HUB_TAILSCALE_HOST = now;
+      fs.writeFileSync(HOST_FILE, now, { mode: 0o600 });
+    }
+  } else if (!process.env.HUB_TAILSCALE_HOST && fs.existsSync(HOST_FILE)) {
+    process.env.HUB_TAILSCALE_HOST = fs.readFileSync(HOST_FILE, "utf8").trim();
+  }
+}
+if (process.env.HUB_TAILSCALE_HOST) process.env.HUB_TAILSCALE_HOST_FIXED = "1"; // 직접 지정했으면 그대로
+refreshTailscaleHost();
+setInterval(refreshTailscaleHost, 60_000).unref();
 
 function unlockPage(res: http.ServerResponse, message = "", nextPath = "/") {
   res.writeHead(message ? 401 : 200, {
@@ -92,7 +117,7 @@ async function main() {
       if (d.action === "unlock") {
         if (url.pathname === "/unlock" && req.method === "POST") {
           const origin = req.headers.origin;
-          const okOrigins = listener === "local" ? [`http://127.0.0.1:${LOCAL_PORT}`, `http://localhost:${LOCAL_PORT}`] : [`https://${TAILSCALE_HOST}`];
+          const okOrigins = listener === "local" ? [`http://127.0.0.1:${LOCAL_PORT}`, `http://localhost:${LOCAL_PORT}`] : [`https://${tailscaleHost()}`];
           if (origin && !okOrigins.includes(origin)) {
             res.writeHead(403).end();
             return;
@@ -119,7 +144,7 @@ async function main() {
     });
 
   make("local").listen(LOCAL_PORT, "127.0.0.1", () => console.log(`> 본인 접속: http://127.0.0.1:${LOCAL_PORT} (${dev ? "개발" : "운영"} 모드)`));
-  make("tailscale").listen(TS_PORT, "127.0.0.1", () => console.log(`> Tailscale 전용: 127.0.0.1:${TS_PORT} → https://${TAILSCALE_HOST}`));
+  make("tailscale").listen(TS_PORT, "127.0.0.1", () => console.log(`> Tailscale 전용: 127.0.0.1:${TS_PORT} → https://${tailscaleHost() || "(Tailscale 주소를 아직 모름)"}`));
 }
 
 main();

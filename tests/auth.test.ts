@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { AttemptLimiter, createSession, decide, hashPasscode, LISTENER_HEADER, LOCAL_LOGIN, LOCAL_SESSION_COOKIE, pageCsp, sanitizeHeaders, securityHeaders, SESSION_COOKIE, verifyPasscode, verifySession } from "@/server/http/auth";
-import { isAllowedHost, isLocalRequest, TAILSCALE_HOST } from "@/server/http/local";
+import { isAllowedHost, isLocalRequest, tailscaleHost } from "@/server/http/local";
+
+process.env.HUB_TAILSCALE_HOST = "myhub.talpa-nunki.ts.net";
+const TAILSCALE_HOST = tailscaleHost();
 
 const ME = "me@example.com";
 const secret = "test-secret";
@@ -64,6 +67,10 @@ describe("접속·인증 (7장)", () => {
   it("Host 확인: Tailscale 주소는 3001 로 온 요청에서만", () => {
     expect(isAllowedHost(TAILSCALE_HOST, "tailscale")).toBe(true);
     expect(isAllowedHost(TAILSCALE_HOST, "local")).toBe(false);
+    expect(isAllowedHost("mh-macmini-1.taile87d89.ts.net", "tailscale")).toBe(false); // 예전 주소
+    process.env.HUB_TAILSCALE_HOST = "";
+    expect(isAllowedHost("", "tailscale")).toBe(false); // 주소를 모르면 막는다
+    process.env.HUB_TAILSCALE_HOST = TAILSCALE_HOST;
     expect(isAllowedHost("127.0.0.1:3000", "tailscale")).toBe(false);
     expect(isAllowedHost("evil.example", "tailscale")).toBe(false);
   });
