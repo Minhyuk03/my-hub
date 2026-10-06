@@ -24,6 +24,12 @@ export type GraphOptionsState = {
 
 // 밝은 화면·어두운 화면 모두에서 구분되는 색
 const PALETTE = ["#22c55e", "#3b82f6", "#f59e0b", "#ec4899", "#a855f7", "#14b8a6", "#ef4444", "#84cc16", "#06b6d4", "#f97316"];
+/** "#22c55e" → "34,197,94" */
+const hexToRgb = (hex: string) => {
+  const h = hex.replace("#", "");
+  const v = parseInt(h.length === 3 ? h.replace(/./g, "$&$&") : h, 16);
+  return `${(v >> 16) & 255},${(v >> 8) & 255},${v & 255}`;
+};
 const idOf = (x: string | FGNode) => (typeof x === "string" ? x : x.id);
 
 export function GraphView({ opts, reloadKey }: { opts: GraphOptionsState; reloadKey: number }) {
@@ -164,6 +170,30 @@ export function GraphView({ opts, reloadKey }: { opts: GraphOptionsState; reload
         .onNodeClick((n) => {
           if (n.type === "tag") router.push(`/search?q=${encodeURIComponent(n.tag!)}&tag=${encodeURIComponent(n.tag!)}`);
           else if (n.itemId) router.push(`/items/${n.itemId}`);
+        })
+        // 다크 모드: 태그·연결 많은 문서 주위에 빛을 퍼뜨린다. 빛이 겹칠수록(더하기 합성) 밝아져 자료가 몰린 곳이 성운처럼 보인다.
+        // 라이트 모드는 흰 배경 그대로 (빛 없음)
+        .onRenderFramePre((ctx) => {
+          if (!dark) return;
+          const nodes = g.graphData().nodes as FGNode[];
+          ctx.save();
+          ctx.globalCompositeOperation = "lighter";
+          for (const n of nodes) {
+            if (n.x == null || n.y == null || !active(n)) continue;
+            const isTag = n.type === "tag";
+            if (!isTag && n.degree < 2) continue;
+            const r = (isTag ? 10 : 5) + Math.sqrt(n.degree) * (isTag ? 5 : 2.5);
+            const color = isTag ? "196,181,253" : hexToRgb(colorOf.get(n.group) ?? "#9ca3af");
+            const a = Math.min(isTag ? 0.05 + n.degree * 0.004 : 0.03 + n.degree * 0.003, isTag ? 0.22 : 0.12);
+            const grad = ctx.createRadialGradient(n.x, n.y, 0, n.x, n.y, r);
+            grad.addColorStop(0, `rgba(${color},${a})`);
+            grad.addColorStop(1, `rgba(${color},0)`);
+            ctx.fillStyle = grad;
+            ctx.beginPath();
+            ctx.arc(n.x, n.y, r, 0, 2 * Math.PI);
+            ctx.fill();
+          }
+          ctx.restore();
         })
         .cooldownTicks(200)
         .graphData({ nodes: data.nodes.map((n) => ({ ...n })), links: data.links.map((l) => ({ ...l })) });
