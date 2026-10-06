@@ -1,7 +1,7 @@
 "use client";
 
 import { ChevronRight } from "lucide-react";
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
 import { setTagEmojiAction } from "./actions";
 import { GraphView, type GraphOptionsState } from "./graph-view";
@@ -101,8 +101,44 @@ function TagPane({ tags, onChange }: { tags: TagMain[]; onChange: () => void }) 
   );
 }
 
+const OPTS_KEY = "hub.graph.opts";
+const DEFAULT_OPTS: GraphOptionsState = { tags: false, files: false, orphans: false, all: false, suggested: false, color: "folder", project: "" };
+
+/** 저장해 둔 옵션을 확인해서 쓴다 (모르는 값·지워진 프로젝트는 기본값으로) */
+function restoreOpts(raw: string | null, projects: { id: number }[]): GraphOptionsState | null {
+  if (!raw) return null;
+  const v = JSON.parse(raw) as Partial<GraphOptionsState>;
+  const bool = (k: "tags" | "files" | "orphans" | "all" | "suggested") => (typeof v[k] === "boolean" ? v[k] : DEFAULT_OPTS[k]);
+  return {
+    tags: bool("tags"),
+    files: bool("files"),
+    orphans: bool("orphans"),
+    all: bool("all"),
+    suggested: bool("suggested"),
+    color: v.color === "tag" || v.color === "source" ? v.color : "folder",
+    project: projects.some((p) => String(p.id) === String(v.project)) ? String(v.project) : "",
+  };
+}
+
 export function GraphClient({ tags, projects }: { tags: TagMain[]; projects: { id: number; name: string }[] }) {
-  const [opts, setOpts] = useState<GraphOptionsState>({ tags: false, files: false, orphans: false, all: false, suggested: false, color: "folder", project: "" });
+  const [opts, setOpts] = useState<GraphOptionsState>(DEFAULT_OPTS);
+  // 마지막으로 고른 표시 옵션을 이 브라우저에 기억했다가 다시 쓴다 (다른 페이지에 다녀와도 유지)
+  const [ready, setReady] = useState(false);
+  useEffect(() => {
+    try {
+      const saved = restoreOpts(localStorage.getItem(OPTS_KEY), projects);
+      // 브라우저 저장값은 화면이 뜬 뒤에만 읽을 수 있다
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      if (saved) setOpts(saved);
+    } catch {}
+    setReady(true);
+  }, [projects]);
+  useEffect(() => {
+    if (!ready) return;
+    try {
+      localStorage.setItem(OPTS_KEY, JSON.stringify(opts));
+    } catch {}
+  }, [opts, ready]);
   const [reloadKey, setReloadKey] = useState(0);
   const toggle = (k: "tags" | "files" | "orphans" | "all" | "suggested") =>
     setOpts((o) => {
@@ -115,7 +151,7 @@ export function GraphClient({ tags, projects }: { tags: TagMain[]; projects: { i
   return (
     <div className="flex h-full flex-col lg:flex-row">
       <div className="relative h-[65vh] min-h-[420px] flex-1 lg:h-auto">
-        <GraphView opts={opts} reloadKey={reloadKey} />
+        {ready ? <GraphView opts={opts} reloadKey={reloadKey} /> : <div className="flex h-full items-center justify-center text-sm text-muted-foreground">불러오는 중…</div>}
       </div>
       <aside className="space-y-5 overflow-y-auto border-t border-foreground/10 bg-background/60 p-4 lg:w-[320px] lg:border-l lg:border-t-0">
         <section className="space-y-2 text-sm">
