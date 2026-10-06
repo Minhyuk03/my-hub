@@ -86,17 +86,18 @@ describe("AI CLI security and lifecycle", () => {
       expect((await POST(new Request("http://localhost:3000/api/ai-code", { method: "POST", headers, body: '{"action":"run"}' }))).status).toBe(400);
     }
   });
-  it("is available only from the Mac mini itself (not over Tailscale)", async () => {
+  it("works over the authenticated Tailscale listener as well as locally", async () => {
     const ts = { host: "mh-macmini-1.example.ts.net", "x-hub-listener": "tailscale", "tailscale-user-login": "me@example.com" };
-    expect((await GET(new Request("https://mh-macmini-1.example.ts.net/api/ai-code", { headers: ts }))).status).toBe(403);
+    expect((await GET(new Request("https://mh-macmini-1.example.ts.net/api/ai-code", { headers: ts }))).status).toBe(200);
+    expect((await GET(new Request("http://localhost:3000/api/ai-code", { headers: { host: "localhost:3000", "x-hub-listener": "local" } }))).status).toBe(200);
+    // 다른 출처에서 온 쓰기 요청은 Tailscale 이어도 막는다
     const post = await POST(
       new Request("https://mh-macmini-1.example.ts.net/api/ai-code", {
         method: "POST",
-        headers: { ...ts, origin: "https://mh-macmini-1.example.ts.net", "content-type": "application/json" },
+        headers: { ...ts, origin: "https://evil.example", "content-type": "application/json" },
         body: '{"action":"run"}',
       }),
     );
-    expect(post.status).toBe(403);
-    expect((await GET(new Request("http://localhost:3000/api/ai-code", { headers: { host: "localhost:3000", "x-hub-listener": "local" } }))).status).toBe(200);
+    expect(post.status).toBe(400);
   });
 });

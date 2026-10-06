@@ -1,6 +1,6 @@
 # AI 코드 작업
 
-상단 **AI 코드** → `/ai-code`. 기존 `/ai` 문서 정리, `/chat` 검색 채팅, `server.ts` 인증과 두 루프백 리스너는 유지한다. **Mac mini 본인 접속(`http://127.0.0.1:3000`)에서만** 쓸 수 있다. Mac 에서 프로그램(Codex·Claude·Git·검사)을 실행하는 기능이라 Tailscale(노트북·아이폰) 접속에서는 메뉴가 숨겨지고 화면·API 가 거부(403)된다.
+상단 **AI 코드** → `/ai-code`. 기존 `/ai` 문서 정리, `/chat` 검색 채팅, `server.ts` 인증과 두 루프백 리스너는 유지한다. Mac mini 본인 접속과 Tailscale 접속(노트북·아이폰) 모두에서 쓸 수 있다. Tailscale 은 허용 목록 계정 + 앱 패스코드를 통과해야 하며, Tailscale 사용자는 기존 HTTPS 주소 뒤에 `/ai-code`를 붙인다.
 
 ## 준비와 실행
 

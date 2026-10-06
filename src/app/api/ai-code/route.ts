@@ -1,20 +1,13 @@
 import { projects, history, getRun, startRun, stopRun, gitView, commit } from "@/server/ai-code/service";
 import { LISTENER_HEADER } from "@/server/http/auth";
-import { isLocalRequest } from "@/server/http/local";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-class LocalOnlyError extends Error {
-  constructor() {
-    super("AI 코드는 Mac mini 에서 직접 접속한 경우에만 쓸 수 있습니다.");
-  }
-}
-const fail = (e: unknown) => json({ error: e instanceof Error ? e.message : "요청 실패" }, e instanceof LocalOnlyError ? 403 : 400);
+// Mac mini 본인 접속과 Tailscale 접속(허용 계정 + 앱 패스코드, server.ts 에서 확인) 모두 쓸 수 있다
+const fail = (e: unknown) => json({ error: e instanceof Error ? e.message : "요청 실패" }, 400);
 const json = (body: unknown, status = 200) => Response.json(body, { status, headers: { "Cache-Control": "no-store" } });
 function trusted(req: Request, write = false) {
   // This header is injected only after server.ts authentication; direct next dev is unsupported.
   if (!["local", "tailscale"].includes(req.headers.get(LISTENER_HEADER) ?? "")) throw new Error("My Hub 사용자 정의 서버로 접속하세요.");
-  // Mac 에서 프로그램(Codex·Claude·Git·검사)을 실행하는 기능이라 Mac mini 본인 접속(127.0.0.1)에서만 허용한다
-  if (!isLocalRequest(req.headers)) throw new LocalOnlyError();
   if (write) {
     const origin = req.headers.get("origin");
     if (!origin || new URL(origin).host !== req.headers.get("host")) throw new Error("같은 출처 요청만 허용됩니다.");
