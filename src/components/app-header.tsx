@@ -8,7 +8,6 @@ const NAV = [
   { href: "/graph", label: "그래프" },
   { href: "/projects", label: "PARA" },
   { href: "/chat", label: "AI 채팅" },
-  { href: "/ai", label: "AI 정리" },
   { href: "/ai-code", label: "AI 코드" },
 ];
 
@@ -29,10 +28,10 @@ export function AppHeader() {
           ))}
         </nav>
         <SearchPalette />
-        {/* 오른쪽 끝: 라이트/다크 · 설정(톱니, 안에 동기화 상태·중복 파일) */}
+        {/* 오른쪽 끝: 라이트/다크 · 설정(톱니, 안에 동기화 상태·AI 정리·중복 파일) */}
         <div className="ml-auto flex items-center gap-0.5 sm:ml-0">
           <ThemeToggle />
-          <Link href="/settings" aria-label="설정 · 동기화 상태" title="설정 · 동기화 상태" className="-mr-2 flex size-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground">
+          <Link href="/settings" aria-label="설정 · 동기화 상태 · AI 정리" title="설정 · 동기화 상태 · AI 정리" className="-mr-2 flex size-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground">
             <Settings className="size-4" />
           </Link>
         </div>

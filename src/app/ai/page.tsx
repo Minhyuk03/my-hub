@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { SettingsTabs } from "@/components/settings-tabs";
 import { connection } from "next/server";
 import { eq } from "drizzle-orm";
 import { SourceIcon } from "@/components/hub-ui";
@@ -73,6 +74,7 @@ export default async function AiPage() {
 
   return (
     <div className="space-y-4">
+      <SettingsTabs current="/ai" />
       <div className="flex flex-wrap items-center gap-2">
         <h1 className="text-xl font-semibold">AI 정리</h1>
         <span className="text-sm text-muted-foreground">이 Mac 의 로컬 AI 가 태그·프로젝트를 제안합니다. 수락한 것만 적용되고, 외부로 아무것도 보내지 않습니다.</span>
