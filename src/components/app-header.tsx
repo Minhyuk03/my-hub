@@ -3,6 +3,7 @@ import Link from "next/link";
 import { SearchPalette } from "./search-palette";
 import { ThemeToggle } from "./theme-toggle";
 import { NavButtons } from "./nav-buttons";
+import { NavLinks } from "./nav-links";
 
 const NAV = [
   { href: "/graph", label: "그래프" },
@@ -20,13 +21,7 @@ export function AppHeader() {
         <Link href="/" className="font-semibold">
           나의 허브
         </Link>
-        <nav className="flex gap-3 text-sm text-muted-foreground">
-          {NAV.map((n) => (
-            <Link key={n.href} href={n.href} className="hover:text-foreground">
-              {n.label}
-            </Link>
-          ))}
-        </nav>
+        <NavLinks items={NAV} />
         <SearchPalette />
         {/* 오른쪽 끝: 라이트/다크 · 설정(톱니, 안에 동기화 상태·AI 정리·중복 파일) */}
         <div className="ml-auto flex items-center gap-0.5 sm:ml-0">
