@@ -26,7 +26,8 @@ export function NavButtons() {
   }, [pathname]);
   const btn = "flex size-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground disabled:pointer-events-none disabled:opacity-30";
   return (
-    <div className="flex items-center gap-0.5">
+    // 아이콘이 본문 왼쪽 끝과 맞도록 버튼 안쪽 여백만큼 왼쪽으로 당긴다
+    <div className="-ml-2 flex items-center gap-0.5">
       <button type="button" className={btn} onClick={() => router.back()} disabled={!can.back} aria-label="뒤로 가기" title="뒤로 가기">
         <ArrowLeft className="size-4" />
       </button>

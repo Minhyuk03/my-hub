@@ -1,3 +1,4 @@
+import { Settings } from "lucide-react";
 import Link from "next/link";
 import { SearchPalette } from "./search-palette";
 import { ThemeToggle } from "./theme-toggle";
@@ -10,13 +11,13 @@ const NAV = [
   { href: "/ai", label: "AI 정리" },
   { href: "/ai-code", label: "AI 코드" },
   { href: "/status", label: "동기화 상태" },
-  { href: "/settings", label: "설정" },
 ];
 
 export function AppHeader() {
   return (
     <header className="sticky top-0 z-10 border-b bg-background/90 backdrop-blur">
-      <div className="flex w-full flex-wrap items-center gap-x-3 gap-y-2 px-4 py-3 sm:px-6">
+      {/* 본문(main: max-w-6xl, px-4)과 같은 폭·여백이라 메뉴 줄의 왼쪽 끝이 본문 왼쪽 끝과 맞는다 */}
+      <div className="mx-auto flex w-full max-w-6xl flex-wrap items-center gap-x-3 gap-y-2 px-4 py-3">
         <NavButtons />
         <Link href="/" className="font-semibold">
           나의 허브
@@ -29,7 +30,13 @@ export function AppHeader() {
           ))}
         </nav>
         <SearchPalette />
-        <ThemeToggle />
+        {/* 오른쪽 끝: 설정(톱니) · 라이트/다크 */}
+        <div className="ml-auto flex items-center gap-0.5 sm:ml-0">
+          <Link href="/settings" aria-label="설정" title="설정" className="flex size-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground">
+            <Settings className="size-4" />
+          </Link>
+          <ThemeToggle />
+        </div>
       </div>
     </header>
   );
