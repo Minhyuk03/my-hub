@@ -31,8 +31,8 @@ export function GraphView({ opts, reloadKey }: { opts: GraphOptionsState; reload
   const fg = useRef<ForceGraphType<FGNode, FGLink> | null>(null);
   const [data, setData] = useState<Data | null>(null);
   const [q, setQ] = useState("");
-  // 그래프는 라이트/다크와 상관없이 늘 우주(어두운) 배경이라 어두운 쪽 색을 쓴다
-  const dark = true;
+  const [dark, setDark] = useState(true);
+  const hover = useRef<FGNode | null>(null);
   // 점들이 멈추면 라이브러리가 다시 그리기를 쉬므로, 마우스를 올리는 등 강조가 바뀔 때 잠깐 다시 그리게 한다
   const redrawTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const kick = useCallback(() => {
@@ -42,7 +42,6 @@ export function GraphView({ opts, reloadKey }: { opts: GraphOptionsState; reload
     if (redrawTimer.current) clearTimeout(redrawTimer.current);
     redrawTimer.current = setTimeout(() => fg.current?.autoPauseRedraw(true), 300);
   }, []);
-  const hover = useRef<FGNode | null>(null);
   const router = useRouter();
 
   // 데이터 불러오기
@@ -64,6 +63,15 @@ export function GraphView({ opts, reloadKey }: { opts: GraphOptionsState; reload
       alive = false;
     };
   }, [opts, reloadKey]);
+
+  // 라이트/다크 감지
+  useEffect(() => {
+    const read = () => setDark(document.documentElement.classList.contains("dark"));
+    read();
+    const mo = new MutationObserver(read);
+    mo.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
+    return () => mo.disconnect();
+  }, []);
 
   const groups = useMemo(() => {
     const counts = new Map<string, number>();
@@ -109,7 +117,7 @@ export function GraphView({ opts, reloadKey }: { opts: GraphOptionsState; reload
         .nodeRelSize(1)
         .linkColor((l) => {
           const h = hover.current;
-          if (h && (idOf(l.source) === h.id || idOf(l.target) === h.id)) return "rgba(216,180,254,0.75)";
+          if (h && (idOf(l.source) === h.id || idOf(l.target) === h.id)) return dark ? "rgba(255,255,255,0.6)" : "rgba(0,0,0,0.5)";
           return linkColor;
         })
         // AI 제안 태그는 점선
@@ -122,13 +130,8 @@ export function GraphView({ opts, reloadKey }: { opts: GraphOptionsState; reload
           // 노트는 동그라미, 노트가 아닌 문서(Notion·PDF 등)는 네모
           if (n.fileKind) ctx.rect(n.x! - r * 0.9, n.y! - r * 0.9, r * 1.8, r * 1.8);
           else ctx.arc(n.x!, n.y!, r, 0, 2 * Math.PI);
-          const fill = !on ? dim : n.type === "tag" ? "#e9d5ff" : n.type === "file" ? "#9ca3af" : (colorOf.get(n.group) ?? "#9ca3af");
-          ctx.fillStyle = fill;
-          // 별처럼 은은하게 빛나게 (흐려진 점은 빛 없음)
-          ctx.shadowColor = on ? fill : "transparent";
-          ctx.shadowBlur = on ? (hover.current?.id === n.id ? 18 : 8) : 0;
+          ctx.fillStyle = !on ? dim : n.type === "tag" ? (dark ? "#e5e7eb" : "#6b7280") : n.type === "file" ? (dark ? "#9ca3af" : "#9ca3af") : (colorOf.get(n.group) ?? "#9ca3af");
           ctx.fill();
-          ctx.shadowBlur = 0;
           if (n.type === "tag" && n.emoji && on) {
             ctx.font = `${Math.max(r * 1.6, 4)}px sans-serif`;
             ctx.textAlign = "center";
@@ -200,27 +203,27 @@ export function GraphView({ opts, reloadKey }: { opts: GraphOptionsState; reload
   }, [q, kick]);
 
   return (
-    <div className="space-bg relative h-full w-full">
-      <div ref={box} className="relative z-[1] h-full w-full" />
-      <div className="absolute left-3 top-3 z-10 flex items-center gap-2 rounded-md border border-white/10 bg-black/40 px-2 py-1 text-white backdrop-blur">
-        <Search className="size-4 text-white/60" />
+    <div className="relative h-full w-full">
+      <div ref={box} className="absolute inset-0" />
+      <div className="absolute left-3 top-3 flex items-center gap-2 rounded-md border bg-background/80 px-2 py-1 backdrop-blur">
+        <Search className="size-4 text-muted-foreground" />
         <input
           value={q}
           onChange={(e) => setQ(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && find()}
           placeholder="노트 찾기"
-          className="w-40 bg-transparent text-sm outline-none placeholder:text-white/40"
+          className="w-40 bg-transparent text-sm outline-none"
         />
       </div>
-      <div className="absolute bottom-3 left-3 z-10 max-w-[60%] space-y-1 rounded-md border border-white/10 bg-black/40 px-3 py-2 text-xs text-white/80 backdrop-blur">
+      <div className="absolute bottom-3 left-3 max-w-[60%] space-y-1 rounded-md border bg-background/80 px-3 py-2 text-xs backdrop-blur">
         {data ? (
-          <p className="text-white/60">
+          <p className="text-muted-foreground">
             {opts.all ? "문서" : "노트"} {data.stats.notes.toLocaleString()} · 연결 {data.stats.links.toLocaleString()}
             {opts.tags && ` · 태그 ${data.stats.tags}`}
             {opts.suggested && ` · AI 제안 ${data.stats.suggested}개(점선)`}
           </p>
         ) : (
-          <p className="text-white/60">불러오는 중…</p>
+          <p className="text-muted-foreground">불러오는 중…</p>
         )}
         <div className="flex flex-wrap gap-x-3 gap-y-1">
           {groups.slice(0, 10).map(([g, c]) => (
@@ -232,7 +235,7 @@ export function GraphView({ opts, reloadKey }: { opts: GraphOptionsState; reload
         </div>
       </div>
       {data && !data.nodes.length && (
-        <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center p-6 text-center text-sm text-white/60">
+        <div className="absolute inset-0 flex items-center justify-center p-6 text-center text-sm text-muted-foreground">
           표시할 연결이 없습니다. 노트 본문이 색인되어야 [[링크]]와 태그가 보입니다.
         </div>
       )}
