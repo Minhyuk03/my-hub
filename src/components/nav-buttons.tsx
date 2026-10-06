@@ -26,8 +26,9 @@ export function NavButtons() {
   }, [pathname]);
   const btn = "flex size-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground disabled:pointer-events-none disabled:opacity-30";
   return (
-    // 아이콘이 본문 왼쪽 끝과 맞도록 버튼 안쪽 여백만큼 왼쪽으로 당긴다
-    <div className="-ml-2 flex items-center gap-0.5">
+    // 넓은 화면(1400px 이상, 본문 옆에 빈 공간이 충분할 때)에서는 창 왼쪽 끝에 붙이고,
+    // 좁은 화면에서는 메뉴 줄 맨 앞에 둔다 (아이콘이 본문 왼쪽 끝과 맞도록 버튼 여백만큼 당김)
+    <div className="-ml-2 flex items-center gap-0.5 min-[1400px]:absolute min-[1400px]:left-3 min-[1400px]:top-1/2 min-[1400px]:ml-0 min-[1400px]:-translate-y-1/2">
       <button type="button" className={btn} onClick={() => router.back()} disabled={!can.back} aria-label="뒤로 가기" title="뒤로 가기">
         <ArrowLeft className="size-4" />
       </button>
