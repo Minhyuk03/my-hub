@@ -30,6 +30,11 @@ const hexToRgb = (hex: string) => {
   const v = parseInt(h.length === 3 ? h.replace(/./g, "$&$&") : h, 16);
   return `${(v >> 16) & 255},${(v >> 8) & 255},${v & 255}`;
 };
+/** 강조가 나타나고 사라지는 시간(ms) */
+const FADE_MS = 450;
+/** 이름이 보이기 시작하는 확대 배율 / 다 보이는 배율 */
+const LABEL_FROM = 1.8;
+const LABEL_FULL = 2.6;
 const idOf = (x: string | FGNode) => (typeof x === "string" ? x : x.id);
 
 export function GraphView({ opts, reloadKey }: { opts: GraphOptionsState; reloadKey: number }) {
@@ -41,13 +46,33 @@ export function GraphView({ opts, reloadKey }: { opts: GraphOptionsState; reload
   const hover = useRef<FGNode | null>(null);
   // 점들이 멈추면 라이브러리가 다시 그리기를 쉬므로, 마우스를 올리는 등 강조가 바뀔 때 잠깐 다시 그리게 한다
   const redrawTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const kick = useCallback(() => {
+  const kick = useCallback((ms = 300) => {
     const g = fg.current;
     if (!g) return;
     g.autoPauseRedraw(false);
     if (redrawTimer.current) clearTimeout(redrawTimer.current);
-    redrawTimer.current = setTimeout(() => fg.current?.autoPauseRedraw(true), 300);
+    redrawTimer.current = setTimeout(() => fg.current?.autoPauseRedraw(true), ms);
   }, []);
+  // 강조는 천천히 나타나고 천천히 사라진다: 0(강조 없음) ~ 1(완전히 강조) 사이를 FADE_MS 동안 부드럽게 오간다
+  const hl = useRef<{ node: FGNode | null; from: number; dir: 1 | -1 | 0; start: number }>({ node: null, from: 0, dir: 0, start: 0 });
+  const level = useCallback(() => {
+    const h = hl.current;
+    if (!h.dir) return 0;
+    const p = Math.min(1, (performance.now() - h.start) / FADE_MS);
+    const e = p < 0.5 ? 2 * p * p : 1 - (-2 * p + 2) ** 2 / 2; // 처음과 끝이 부드럽게
+    return h.dir === 1 ? h.from + (1 - h.from) * e : h.from * (1 - e);
+  }, []);
+  const setHover = useCallback(
+    (n: FGNode | null) => {
+      const cur = level();
+      const h = hl.current;
+      if (n) hl.current = { node: n, from: h.node && h.node.id !== n.id ? cur * 0.5 : cur, dir: 1, start: performance.now() };
+      else hl.current = { ...h, from: cur, dir: -1, start: performance.now() };
+      hover.current = n;
+      kick(FADE_MS + 100);
+    },
+    [kick, level],
+  );
   const router = useRouter();
 
   // 데이터 불러오기
@@ -107,54 +132,64 @@ export function GraphView({ opts, reloadKey }: { opts: GraphOptionsState; reload
     (async () => {
       const ForceGraph = (await import("force-graph")).default;
       if (disposed || !box.current) return;
-      const fgColor = dark ? "rgba(255,255,255,0.85)" : "rgba(0,0,0,0.8)";
-      const dim = dark ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.1)";
-      const linkColor = dark ? "rgba(255,255,255,0.14)" : "rgba(0,0,0,0.12)";
       const g: ForceGraphType<FGNode, FGLink> = fg.current ?? new ForceGraph<FGNode, FGLink>(box.current);
       fg.current = g;
       const radius = (n: FGNode) => (n.type === "tag" ? 2.5 : 1.5) + Math.min(Math.sqrt(n.degree) * 0.7, 9);
-      const active = (n: FGNode) => {
-        const h = hover.current;
-        return !h || h.id === n.id || neighbors.get(h.id)?.has(n.id);
+      // 강조 중인 점과 이어진 점인지 (강조가 사라지는 동안에도 마지막 점 기준)
+      const near = (n: FGNode) => {
+        const h = hl.current.node;
+        return !h || h.id === n.id || !!neighbors.get(h.id)?.has(n.id);
       };
+      const touches = (l: FGLink) => {
+        const h = hl.current.node;
+        return !!h && (idOf(l.source) === h.id || idOf(l.target) === h.id);
+      };
+      const ink = dark ? "255,255,255" : "0,0,0";
       g.width(box.current.clientWidth)
         .height(box.current.clientHeight)
         .backgroundColor("rgba(0,0,0,0)")
         .nodeRelSize(1)
         .linkColor((l) => {
-          const h = hover.current;
-          if (h && (idOf(l.source) === h.id || idOf(l.target) === h.id)) return dark ? "rgba(255,255,255,0.6)" : "rgba(0,0,0,0.5)";
-          return linkColor;
+          const L = level();
+          const base = dark ? 0.14 : 0.12;
+          // 이어진 선은 점점 진하게, 나머지 선은 점점 흐리게
+          return touches(l) ? `rgba(${ink},${base + (0.6 - base) * L})` : `rgba(${ink},${base * (1 - 0.7 * L)})`;
         })
         // AI 제안 태그는 점선
         .linkLineDash((l) => (l.kind === "suggested" ? [2, 2] : null))
-        .linkWidth((l) => (hover.current && (idOf(l.source) === hover.current.id || idOf(l.target) === hover.current.id) ? 1.5 : 0.6))
+        .linkWidth((l) => (touches(l) ? 0.6 + 0.9 * level() : 0.6))
         .nodeCanvasObject((n, ctx, scale) => {
           const r = radius(n);
-          const on = active(n);
+          const L = level();
+          // 강조와 상관없는 점은 점점 흐려진다
+          const fade = near(n) ? 1 : 1 - 0.85 * L;
+          ctx.save();
+          ctx.globalAlpha = fade;
           ctx.beginPath();
           // 노트는 동그라미, 노트가 아닌 문서(Notion·PDF 등)는 네모
           if (n.fileKind) ctx.rect(n.x! - r * 0.9, n.y! - r * 0.9, r * 1.8, r * 1.8);
           else ctx.arc(n.x!, n.y!, r, 0, 2 * Math.PI);
-          ctx.fillStyle = !on ? dim : n.type === "tag" ? (dark ? "#e5e7eb" : "#6b7280") : n.type === "file" ? (dark ? "#9ca3af" : "#9ca3af") : (colorOf.get(n.group) ?? "#9ca3af");
+          ctx.fillStyle = n.type === "tag" ? (dark ? "#e5e7eb" : "#6b7280") : n.type === "file" ? "#9ca3af" : (colorOf.get(n.group) ?? "#9ca3af");
           ctx.fill();
-          if (n.type === "tag" && n.emoji && on) {
+          if (n.type === "tag" && n.emoji) {
             ctx.font = `${Math.max(r * 1.6, 4)}px sans-serif`;
             ctx.textAlign = "center";
             ctx.textBaseline = "middle";
             ctx.fillText(n.emoji, n.x!, n.y!);
           }
-          // 확대했거나 마우스를 올린 주변 노드만 이름 표시 (Obsidian 과 비슷하게)
-          const showLabel = scale > 2.5 || (hover.current != null && on) || (scale > 1.2 && n.degree > 15);
-          if (showLabel) {
+          // 이름은 일정 이상 확대했을 때만 (멀리서는 글자 없음). 확대하는 동안 서서히 나타난다
+          const show = Math.min(1, Math.max(0, (scale - LABEL_FROM) / (LABEL_FULL - LABEL_FROM)));
+          if (show > 0) {
             const fs = Math.max(11 / scale, 1.5);
             ctx.font = `${fs}px -apple-system, "Apple SD Gothic Neo", sans-serif`;
             ctx.textAlign = "center";
             ctx.textBaseline = "top";
-            ctx.fillStyle = on ? fgColor : dim;
+            ctx.globalAlpha = fade * show;
+            ctx.fillStyle = `rgba(${ink},0.85)`;
             const label = n.type === "tag" && n.emoji ? `${n.emoji} ${n.label}` : n.label;
             ctx.fillText(label.length > 30 ? label.slice(0, 29) + "…" : label, n.x!, n.y! + r + 1);
           }
+          ctx.restore();
         })
         .nodePointerAreaPaint((n, color, ctx) => {
           ctx.fillStyle = color;
@@ -163,9 +198,8 @@ export function GraphView({ opts, reloadKey }: { opts: GraphOptionsState; reload
           ctx.fill();
         })
         .onNodeHover((n) => {
-          hover.current = n ?? null;
           box.current!.style.cursor = n ? "pointer" : "grab";
-          kick();
+          setHover(n ?? null);
         })
         .onNodeClick((n) => {
           if (n.type === "tag") router.push(`/search?q=${encodeURIComponent(n.tag!)}&tag=${encodeURIComponent(n.tag!)}`);
@@ -179,12 +213,14 @@ export function GraphView({ opts, reloadKey }: { opts: GraphOptionsState; reload
           ctx.save();
           ctx.globalCompositeOperation = "lighter";
           for (const n of nodes) {
-            if (n.x == null || n.y == null || !active(n)) continue;
+            if (n.x == null || n.y == null) continue;
+            const glow = near(n) ? 1 : 1 - level();
+            if (glow <= 0.01) continue;
             const isTag = n.type === "tag";
             if (!isTag && n.degree < 2) continue;
             const r = (isTag ? 10 : 5) + Math.sqrt(n.degree) * (isTag ? 5 : 2.5);
             const color = isTag ? "196,181,253" : hexToRgb(colorOf.get(n.group) ?? "#9ca3af");
-            const a = Math.min(isTag ? 0.05 + n.degree * 0.004 : 0.03 + n.degree * 0.003, isTag ? 0.22 : 0.12);
+            const a = Math.min(isTag ? 0.05 + n.degree * 0.004 : 0.03 + n.degree * 0.003, isTag ? 0.22 : 0.12) * glow;
             const grad = ctx.createRadialGradient(n.x, n.y, 0, n.x, n.y, r);
             grad.addColorStop(0, `rgba(${color},${a})`);
             grad.addColorStop(1, `rgba(${color},0)`);
@@ -209,7 +245,7 @@ export function GraphView({ opts, reloadKey }: { opts: GraphOptionsState; reload
       disposed = true;
       ro?.disconnect();
     };
-  }, [data, dark, colorOf, neighbors, router, kick]);
+  }, [data, dark, colorOf, neighbors, router, setHover, level]);
 
   useEffect(
     () => () => {
@@ -225,12 +261,11 @@ export function GraphView({ opts, reloadKey }: { opts: GraphOptionsState; reload
     const t = q.trim().normalize("NFC").toLowerCase();
     const n = (g.graphData().nodes as FGNode[]).find((x) => x.label.toLowerCase().includes(t));
     if (n && n.x != null) {
-      hover.current = n;
-      kick();
+      setHover(n);
       g.centerAt(n.x, n.y, 600);
       g.zoom(4, 600);
     }
-  }, [q, kick]);
+  }, [q, setHover]);
 
   return (
     <div className="relative h-full w-full">
