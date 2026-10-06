@@ -1,6 +1,7 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Project, Run } from "@/server/ai-code/service";
+import { OutputView } from "./output-view";
 
 type GitView = { files: { status: string; path: string }[]; diff: string; staged: string; fingerprint: string };
 const api = "/api/ai-code";
@@ -9,6 +10,9 @@ async function request<T>(query = "", body?: object): Promise<T> {
   if (!res.headers.get("content-type")?.includes("application/json")) throw new Error("잠금 해제 또는 서버 접속 상태를 확인하세요.");
   const value = await res.json(); if (!res.ok) throw new Error(value.error ?? "요청 실패"); return value;
 }
+const STATUS: Record<string, string> = { running: "진행 중", completed: "완료", failed: "실패", stopped: "중단됨", interrupted: "중단됨", timeout: "시간 초과" };
+const statusLabel = (s?: string) => (s ? STATUS[s] ?? s : "");
+const providerLabel = (p: string) => (p === "codex" ? "Codex" : p === "claude" ? "Claude" : "검사");
 const control = "rounded-lg border bg-background px-3 py-2 text-sm disabled:opacity-40";
 export function CodeWorkspace() {
   const [projects, setProjects] = useState<Project[]>([]), [projectId, setProjectId] = useState("");
@@ -52,7 +56,7 @@ export function CodeWorkspace() {
           {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
         </select></label><p className="break-all text-xs text-muted-foreground">{selected?.path}</p>
         <h2 className="font-medium">대화 · 검사 기록</h2>
-        <div className="max-h-[600px] space-y-2 overflow-auto">{runs.map(r => <button key={r.id} className={`${control} w-full text-left ${r.id === run?.id ? "border-primary" : ""}`} onClick={() => void open(r.id)}><span className="block truncate">{r.prompt}</span><span className="text-xs text-muted-foreground">{r.provider} · {r.status} · {new Date(r.startedAt).toLocaleString("ko-KR")}</span></button>)}{!runs.length && <p className="text-sm text-muted-foreground">아직 기록이 없습니다.</p>}</div>
+        <div className="max-h-[600px] space-y-2 overflow-auto">{runs.map(r => <button key={r.id} className={`${control} w-full text-left ${r.id === run?.id ? "border-primary" : ""}`} onClick={() => void open(r.id)}><span className="block truncate">{r.prompt}</span><span className="text-xs text-muted-foreground">{providerLabel(r.provider)} · {statusLabel(r.status)} · {new Date(r.startedAt).toLocaleString("ko-KR")}</span></button>)}{!runs.length && <p className="text-sm text-muted-foreground">아직 기록이 없습니다.</p>}</div>
       </aside>
       <section className="space-y-4">
         <form className="space-y-3 rounded-xl border p-4" onSubmit={e => { e.preventDefault(); void act({ action: "run", projectId, provider, prompt, ...(continuing && run ? { parentId: run.id } : {}) }); }}>
@@ -63,7 +67,7 @@ export function CodeWorkspace() {
           {run?.status === "running" && <button type="button" className={control} onClick={() => { request("", { action: "stop", id: run.id }).catch(e => setError(String(e))); }}>작업 중단</button>}
           {selected?.checks.map(check => <button type="button" className={control} key={check} disabled={!!busy} onClick={() => void act({ action: "check", projectId, check })}>{check === "test" ? "테스트" : check === "typecheck" ? "타입 검사" : "코드 검사"}</button>)}</div>
         </form>
-        <div className="rounded-xl border p-4"><h2 className="mb-2 font-medium">실시간 출력 · 실행 결과 <span className="text-sm text-muted-foreground">{run?.status} {run?.exitCode !== undefined && `· 종료 코드 ${run.exitCode}`}</span></h2><pre aria-live="polite" className="max-h-[500px] min-h-40 overflow-auto whitespace-pre-wrap break-all rounded-lg bg-muted p-3 text-xs">{run?.output || "AI 응답, 파일 작업과 검사 결과가 이곳에 표시됩니다."}</pre></div>
+        <div className="rounded-xl border p-4"><h2 className="mb-2 font-medium">결과 <span className="text-sm text-muted-foreground">{statusLabel(run?.status)} {run?.exitCode !== undefined && run?.exitCode !== null && `· 종료 코드 ${run.exitCode}`}</span></h2><OutputView provider={run?.provider ?? "check"} output={run?.output ?? ""} running={run?.status === "running"} root={selected?.path} /></div>
         <div className="space-y-3 rounded-xl border p-4"><div className="flex items-center justify-between"><h2 className="font-medium">Git 변경 사항</h2><button className={control} onClick={() => void refresh().catch(e => setError(String(e)))}>새로 확인</button></div>
           <ul className="space-y-1 text-sm">{git?.files.map(f => <li key={f.path} className="break-all font-mono">{f.status} {f.path}</li>)}</ul>
           <details open><summary>작업 폴더 diff</summary><pre className="max-h-72 overflow-auto whitespace-pre-wrap break-all bg-muted p-3 text-xs">{git?.diff || "추적 파일 변경 없음 (새 파일 내용은 diff에 포함되지 않습니다)"}</pre></details>
