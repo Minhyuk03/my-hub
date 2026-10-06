@@ -7,7 +7,20 @@ import { Highlighted, SourceIcon, StateBadge } from "@/components/hub-ui";
 import { relTime, shortPath } from "@/lib/format";
 import type { SearchHit } from "@/server/search/query";
 
-/** 홈 가운데 큰 검색창. 입력하면 바로 결과가 아래에 뜨고, Enter 는 전체 결과 화면으로 */
+/** 주소처럼 보이면(example.com, https://…) 그 주소로 바로 간다 */
+export function asUrl(q: string): string | null {
+  const t = q.trim();
+  if (/^https?:\/\/\S+$/i.test(t)) return t;
+  if (/^[\w-]+(\.[\w-]+)+(:\d+)?(\/\S*)?$/.test(t) && !/\s/.test(t)) return `https://${t}`;
+  return null;
+}
+export const googleUrl = (q: string) => `https://www.google.com/search?q=${encodeURIComponent(q.trim())}`;
+
+/**
+ * 홈 가운데 큰 검색창: 크롬 시작 페이지처럼 Enter 는 Google 검색(주소면 그 주소로).
+ * 입력하는 동안 아래에 "Google 에서 검색" 과 허브 안의 결과가 함께 뜨고, ↓ 로 허브 결과를 고를 수 있다.
+ * 허브 결과는 이 Mac 안에서만 찾는다 (Google 로는 Enter 를 누른 검색어만 간다).
+ */
 export function HomeSearch() {
   const [q, setQ] = useState("");
   const [hits, setHits] = useState<SearchHit[]>([]);
@@ -58,7 +71,7 @@ export function HomeSearch() {
         onSubmit={(e) => {
           e.preventDefault();
           if (sel >= 0 && shown[sel]) router.push(`/items/${shown[sel].id}`);
-          else if (q.trim()) router.push(`/search?q=${encodeURIComponent(q)}`);
+          else if (q.trim()) window.location.assign(asUrl(q) ?? googleUrl(q));
         }}
         className="flex items-center gap-3 rounded-full border bg-background px-5 py-3 shadow-lg focus-within:ring-2 focus-within:ring-ring/40"
       >
@@ -68,14 +81,30 @@ export function HomeSearch() {
           onChange={(e) => setQ(e.target.value)}
           onFocus={() => setOpen(true)}
           onKeyDown={onKey}
-          placeholder="파일, 노트, 프로젝트 검색"
+          placeholder="Google 검색 또는 주소 입력"
           className="flex-1 bg-transparent text-base outline-none"
-          aria-label="허브 검색"
+          aria-label="Google 검색"
+          autoComplete="off"
         />
-        <kbd className="hidden rounded border px-1.5 text-xs text-muted-foreground sm:inline">⌘K</kbd>
       </form>
-      {shown.length > 0 && (
+      {q.trim() && open && (
         <div className="absolute inset-x-0 top-full z-20 mt-2 overflow-hidden rounded-2xl border bg-popover text-popover-foreground shadow-xl">
+          <a href={asUrl(q) ?? googleUrl(q)} className={`flex items-center gap-2 px-4 py-2 ${sel === -1 ? "bg-muted" : "hover:bg-muted"}`} onMouseEnter={() => setSel(-1)}>
+            <Search className="size-4 text-muted-foreground" />
+            <span className="truncate">
+              {asUrl(q) ? (
+                <>
+                  <span className="font-medium">{asUrl(q)}</span> 열기
+                </>
+              ) : (
+                <>
+                  <span className="font-medium">{q.trim()}</span> <span className="text-muted-foreground">— Google 검색</span>
+                </>
+              )}
+            </span>
+            <span className="ml-auto text-xs text-muted-foreground">Enter</span>
+          </a>
+          {shown.length > 0 && <div className="border-t px-4 pb-1 pt-2 text-xs text-muted-foreground">내 허브에서</div>}
           {shown.map((h, i) => (
             <a key={h.id} href={`/items/${h.id}`} className={`block px-4 py-2 ${i === sel ? "bg-muted" : "hover:bg-muted"}`} onMouseEnter={() => setSel(i)}>
               <div className="flex items-center gap-2">
@@ -92,7 +121,7 @@ export function HomeSearch() {
               )}
             </a>
           ))}
-          {total > shown.length && (
+          {shown.length > 0 && total > shown.length && (
             <a href={`/search?q=${encodeURIComponent(q)}`} className="block border-t px-4 py-2 text-sm text-muted-foreground hover:bg-muted">
               전체 결과 {total.toLocaleString()}건 보기 →
             </a>
