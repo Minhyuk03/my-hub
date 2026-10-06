@@ -46,7 +46,8 @@ export function CodeWorkspace() {
     try { const r = await request<Run>("", body); watch(r); setContinuing(false); await refresh(); } catch (e) { setError(String(e)); } finally { setPending(false); }
   }
   async function open(id: string) { try { const r = await request<Run>(`?id=${id}`); if (r.provider !== "check") setProvider(r.provider); watch(r); } catch (e) { setError(String(e)); } }
-  return <main className="mx-auto max-w-7xl space-y-5 p-4 sm:p-6">
+  // 다른 화면과 같은 본문 폭·여백을 쓴다 (레이아웃의 main 안이라 따로 main·여백을 두지 않음)
+  return <div className="space-y-5">
     <div><h1 className="text-2xl font-semibold">AI 코드 작업</h1><p className="mt-2 text-sm text-muted-foreground">Mac mini의 Codex · Claude CLI로 등록한 프로젝트를 작업합니다. 셸 실행은 차단되며 검사는 아래 버튼으로 실행합니다.</p></div>
     {error && <p role="alert" className="rounded-lg border border-red-400 p-3 text-sm text-red-600">{error}</p>}
     {notice && <p role="status" className="rounded-lg border p-3 text-sm">{notice}</p>}
@@ -77,5 +78,5 @@ export function CodeWorkspace() {
         </div>
       </section>
     </div>
-  </main>;
+  </div>;
 }
