@@ -30,6 +30,16 @@ const hexToRgb = (hex: string) => {
   const v = parseInt(h.length === 3 ? h.replace(/./g, "$&$&") : h, 16);
   return `${(v >> 16) & 255},${(v >> 8) & 255},${v & 255}`;
 };
+/** 강조 색: 이어진 선(옅은 파랑), 마우스를 올린 점(푸른 회색) */
+const HL_LINK = "125,160,215";
+const HL_NODE = "#7f93b2";
+/** 두 색 섞기 (t=0 이면 a, 1 이면 b) */
+const mix = (a: string, b: string, t: number) => {
+  const [r1, g1, b1] = hexToRgb(a).split(",").map(Number);
+  const [r2, g2, b2] = hexToRgb(b).split(",").map(Number);
+  const m = (x: number, y: number) => Math.round(x + (y - x) * t);
+  return `rgb(${m(r1, r2)},${m(g1, g2)},${m(b1, b2)})`;
+};
 /** 강조가 나타나고 사라지는 시간(ms) */
 const FADE_MS = 450;
 /** 이름이 보이기 시작하는 확대 배율 / 다 보이는 배율 */
@@ -153,23 +163,28 @@ export function GraphView({ opts, reloadKey }: { opts: GraphOptionsState; reload
           const L = level();
           const base = dark ? 0.14 : 0.12;
           // 이어진 선은 점점 진하게, 나머지 선은 점점 흐리게
-          return touches(l) ? `rgba(${ink},${base + (0.6 - base) * L})` : `rgba(${ink},${base * (1 - 0.7 * L)})`;
+          // 이어진 선은 점점 옅은 파란빛으로, 나머지 선은 점점 흐리게
+          return touches(l) ? `rgba(${HL_LINK},${base + (0.55 - base) * L})` : `rgba(${ink},${base * (1 - 0.75 * L)})`;
         })
         // AI 제안 태그는 점선
         .linkLineDash((l) => (l.kind === "suggested" ? [2, 2] : null))
-        .linkWidth((l) => (touches(l) ? 0.6 + 0.9 * level() : 0.6))
+        .linkWidth((l) => (touches(l) ? 0.6 + 0.4 * level() : 0.6))
         .nodeCanvasObject((n, ctx, scale) => {
           const r = radius(n);
           const L = level();
-          // 강조와 상관없는 점은 점점 흐려진다
-          const fade = near(n) ? 1 : 1 - 0.85 * L;
+          const h = hl.current.node;
+          const isHover = !!h && h.id === n.id;
+          // 강조와 상관없는 점은 점점 흐려지되 희미하게는 남는다
+          const fade = near(n) ? 1 : 1 - 0.8 * L;
           ctx.save();
           ctx.globalAlpha = fade;
           ctx.beginPath();
           // 노트는 동그라미, 노트가 아닌 문서(Notion·PDF 등)는 네모
           if (n.fileKind) ctx.rect(n.x! - r * 0.9, n.y! - r * 0.9, r * 1.8, r * 1.8);
           else ctx.arc(n.x!, n.y!, r, 0, 2 * Math.PI);
-          ctx.fillStyle = n.type === "tag" ? (dark ? "#e5e7eb" : "#6b7280") : n.type === "file" ? "#9ca3af" : (colorOf.get(n.group) ?? "#9ca3af");
+          const own = n.type === "tag" ? (dark ? "#e5e7eb" : "#6b7280") : n.type === "file" ? "#9ca3af" : (colorOf.get(n.group) ?? "#9ca3af");
+          // 강조 중: 마우스를 올린 점은 푸른 회색, 이어진 점은 밝은 회색으로 서서히 바뀐다
+          ctx.fillStyle = h && L > 0 && near(n) ? mix(own, isHover ? HL_NODE : dark ? "#d4d4d8" : "#52525b", L) : own;
           ctx.fill();
           if (n.type === "tag" && n.emoji) {
             ctx.font = `${Math.max(r * 1.6, 4)}px sans-serif`;
@@ -177,10 +192,12 @@ export function GraphView({ opts, reloadKey }: { opts: GraphOptionsState; reload
             ctx.textBaseline = "middle";
             ctx.fillText(n.emoji, n.x!, n.y!);
           }
-          // 이름은 일정 이상 확대했을 때만 (멀리서는 글자 없음). 확대하는 동안 서서히 나타난다
-          const show = Math.min(1, Math.max(0, (scale - LABEL_FROM) / (LABEL_FULL - LABEL_FROM)));
+          // 이름은 일정 이상 확대했을 때만 (멀리서는 글자 없음). 확대하는 동안 서서히 나타난다.
+          // 단, 마우스를 올린 점의 이름은 멀리서도 서서히 보인다
+          const zoomShow = Math.min(1, Math.max(0, (scale - LABEL_FROM) / (LABEL_FULL - LABEL_FROM)));
+          const show = isHover ? Math.max(zoomShow, L) : zoomShow;
           if (show > 0) {
-            const fs = Math.max(11 / scale, 1.5);
+            const fs = isHover ? Math.max(13 / scale, 1.5) : Math.max(11 / scale, 1.5);
             ctx.font = `${fs}px -apple-system, "Apple SD Gothic Neo", sans-serif`;
             ctx.textAlign = "center";
             ctx.textBaseline = "top";
