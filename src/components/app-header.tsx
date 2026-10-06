@@ -10,7 +10,6 @@ const NAV = [
   { href: "/chat", label: "AI 채팅" },
   { href: "/ai", label: "AI 정리" },
   { href: "/ai-code", label: "AI 코드" },
-  { href: "/status", label: "동기화 상태" },
 ];
 
 export function AppHeader() {
@@ -30,12 +29,12 @@ export function AppHeader() {
           ))}
         </nav>
         <SearchPalette />
-        {/* 오른쪽 끝: 설정(톱니) · 라이트/다크 */}
+        {/* 오른쪽 끝: 라이트/다크 · 설정(톱니, 안에 동기화 상태·중복 파일) */}
         <div className="ml-auto flex items-center gap-0.5 sm:ml-0">
-          <Link href="/settings" aria-label="설정" title="설정" className="flex size-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground">
+          <ThemeToggle />
+          <Link href="/settings" aria-label="설정 · 동기화 상태" title="설정 · 동기화 상태" className="-mr-2 flex size-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground">
             <Settings className="size-4" />
           </Link>
-          <ThemeToggle />
         </div>
       </div>
     </header>

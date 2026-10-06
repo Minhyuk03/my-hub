@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { SettingsTabs } from "@/components/settings-tabs";
 import { connection } from "next/server";
 import { ItemRow } from "@/components/hub-ui";
 import { buttonVariants } from "@/components/ui/button";
@@ -26,6 +27,7 @@ export default async function DuplicatesPage({ searchParams }: PageProps<"/dupli
   const q = (o: Record<string, number>) => `/duplicates?${new URLSearchParams(Object.entries({ min: minSize, page, ...o }).map(([k, v]) => [k, String(v)]))}`;
   return (
     <div className="space-y-4">
+      <SettingsTabs current="/duplicates" />
       <div>
         <h1 className="text-xl font-semibold">중복 파일</h1>
         <p className="text-sm text-muted-foreground">

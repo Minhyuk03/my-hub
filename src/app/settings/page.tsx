@@ -1,3 +1,4 @@
+import { SettingsTabs } from "@/components/settings-tabs";
 import { connection } from "next/server";
 import { SourceIcon, SourceStatusBadge } from "@/components/hub-ui";
 import { Button } from "@/components/ui/button";
@@ -70,7 +71,7 @@ export default async function SettingsPage({ searchParams }: PageProps<"/setting
 
   return (
     <div className="space-y-4">
-      <h1 className="text-xl font-semibold">설정</h1>
+      <SettingsTabs current="/settings" />
 
       <Card>
         <CardHeader>

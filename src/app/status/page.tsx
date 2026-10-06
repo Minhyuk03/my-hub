@@ -1,4 +1,4 @@
-import Link from "next/link";
+import { SettingsTabs } from "@/components/settings-tabs";
 import { connection } from "next/server";
 import { SourceIcon, SourceStatusBadge } from "@/components/hub-ui";
 import { Button } from "@/components/ui/button";
@@ -28,14 +28,12 @@ export default async function StatusPage() {
   return (
     <div className="space-y-4">
       <AutoRefresh seconds={syncing ? 3 : 15} />
+      <SettingsTabs current="/status" />
       <div className="flex flex-wrap items-center gap-2">
         <h1 className="text-xl font-semibold">동기화 상태</h1>
         <span className={worker.alive ? "text-sm text-muted-foreground" : "text-sm text-destructive"}>
           인덱서 {worker.alive ? `실행 중 (마지막 응답 ${relTime(worker.updatedAt)})` : "멈춤 — 터미널에서 npm run hub 로 시작하세요"}
         </span>
-        <Link href="/duplicates" className="ml-auto text-sm text-primary hover:underline">
-          중복 파일 보기 →
-        </Link>
       </div>
 
       <div className="grid gap-4 md:grid-cols-2">
