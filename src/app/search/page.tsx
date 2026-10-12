@@ -3,7 +3,6 @@ import { connection } from "next/server";
 import { Highlighted, ItemRow } from "@/components/hub-ui";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { KIND_LABEL } from "@/lib/labels";
 import { getDb } from "@/server/db";
 import { sources } from "@/server/db/schema";
 import { allTags } from "@/server/queries";
@@ -12,6 +11,7 @@ import { projects } from "@/server/db/schema";
 import { DATE_RANGES, fromRecord, parseFilters } from "@/server/search/params";
 import { hybridSearch } from "@/server/search/semantic";
 import { markForeground } from "@/server/ai/foreground";
+import { CategoryFilter } from "@/components/category-filter";
 import { Ollama, realOllama } from "@/server/ai/ollama";
 import { getSettings } from "@/server/settings";
 
@@ -43,7 +43,6 @@ export default async function SearchPage({ searchParams }: PageProps<"/search">)
   const tagEmoji = tagEmojiMap(db);
   const projectRows = db.select().from(projects).all();
   const selSources = p.getAll("source");
-  const selKinds = p.getAll("kind");
 
   const pageHref = (n: number) => {
     const u = new URLSearchParams();
@@ -65,15 +64,7 @@ export default async function SearchPage({ searchParams }: PageProps<"/search">)
             </label>
           ))}
         </fieldset>
-        <fieldset className="space-y-1">
-          <legend className="mb-1 font-medium">형식</legend>
-          {Object.entries(KIND_LABEL).map(([k, label]) => (
-            <label key={k} className="flex items-center gap-2">
-              <input type="checkbox" name="kind" value={k} defaultChecked={selKinds.includes(k)} />
-              {label}
-            </label>
-          ))}
-        </fieldset>
+        <CategoryFilter />
         <fieldset className="space-y-1">
           <legend className="mb-1 font-medium">수정 날짜</legend>
           <select name="date" defaultValue={p.get("date") ?? ""} className="w-full rounded-md border bg-background px-2 py-1">

@@ -111,7 +111,11 @@ export type ProjectItemRow = {
   rule: "include" | "exclude" | null;
 };
 
-export function projectItemList(db: Db, projectId: number, opts: { sourceIds?: number[]; since?: number; limit?: number; offset?: number } = {}) {
+export function projectItemList(
+  db: Db,
+  projectId: number,
+  opts: { sourceIds?: number[]; since?: number; limit?: number; offset?: number; categories?: string[] } = {},
+) {
   const m = membershipSql(db, projectId);
   const where = [`i.state != 'deleted'`];
   const params: unknown[] = [...m.params];
@@ -122,6 +126,10 @@ export function projectItemList(db: Db, projectId: number, opts: { sourceIds?: n
   if (opts.since) {
     where.push(`i.modified_at >= ?`);
     params.push(opts.since);
+  }
+  if (opts.categories?.length) {
+    where.push(`i.category IN (${opts.categories.map(() => "?").join(",")})`);
+    params.push(...opts.categories);
   }
   const sql = `
     SELECT i.id, i.title, i.path, i.kind, i.state, i.no_content_reason AS noContentReason, i.modified_at AS modifiedAt,
@@ -262,4 +270,13 @@ export function mergeProjects(db: Db, fromIds: number[], intoId: number) {
       db.delete(projects).where(eq(projects.id, fromId)).run();
     }
   });
+}
+
+/** 프로젝트 항목의 분류별 개수 (분류 체크박스 옆 숫자) */
+export function projectCategoryCounts(db: Db, projectId: number): Record<string, number> {
+  const m = membershipSql(db, projectId);
+  const rows = db.$client
+    .prepare(`SELECT coalesce(category, 'other') AS c, count(*) AS n FROM items WHERE state != 'deleted' AND id IN (${m.sql}) GROUP BY c`)
+    .all(...m.params) as { c: string; n: number }[];
+  return Object.fromEntries(rows.map((r) => [r.c, r.n]));
 }

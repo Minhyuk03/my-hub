@@ -77,6 +77,8 @@ export const items = sqliteTable(
     deletedDetectedAt: integer("deleted_detected_at"),
     seenScanId: integer("seen_scan_id"),
     previewText: text("preview_text"),
+    /** 보기용 분류: doc·note·code·data·media·other (src/server/category.ts, 워커가 주기적으로 다시 계산) */
+    category: text("category"),
   },
   (t) => [
     uniqueIndex("items_path").on(t.path),
@@ -87,6 +89,7 @@ export const items = sqliteTable(
     index("items_source").on(t.sourceId, t.state),
     index("items_folder").on(t.folderId),
     index("items_external").on(t.sourceId, t.externalId),
+    index("items_category").on(t.category),
   ],
 );
 

@@ -33,6 +33,7 @@ import { runAiBatch } from "@/server/ai/pipeline";
 import { importConversations, parseExport } from "@/server/connectors/chats/import";
 import { readCalendar } from "@/server/calendar";
 import { generateParaMoves } from "@/server/projects/para-moves";
+import { recomputeCategories } from "@/server/category";
 
 loadEnvLocal();
 const db = openDb();
@@ -315,6 +316,7 @@ async function handleCommands() {
         case "settings_changed": {
           const n = purgeExcluded(db);
           if (n) log("제외 규칙 적용: 색인에서 뺀 항목", n);
+          updateCategories();
         }
           for (const id of [...watchers.keys()]) {
             await stopWatcher(id);
@@ -340,6 +342,17 @@ function updateSuggestions() {
     if (n) log("프로젝트 연결 제안", `${n}건`);
   } catch (e) {
     log("제안 계산 실패", (e as Error).message);
+  }
+  updateCategories();
+}
+
+/** 보기용 분류(문서·데이터 …) 다시 계산: 스캔이 끝날 때·제외 규칙이 바뀔 때·5분마다 */
+function updateCategories() {
+  try {
+    const n = recomputeCategories(db);
+    if (n) log("분류 갱신", n);
+  } catch (e) {
+    log("분류 계산 실패", (e as Error).message);
   }
 }
 
@@ -466,6 +479,8 @@ const timers = [
   setInterval(() => void recordEnv().catch((e) => log("환경 기록 오류", e)), 30_000),
   setInterval(() => void calendarTick().catch((e) => log("캘린더 오류", e)), 15 * 60_000),
   setTimeout(() => void calendarTick().catch((e) => log("캘린더 오류", e)), 5000),
+  setTimeout(updateCategories, 3000),
+  setInterval(updateCategories, 5 * 60_000),
 ];
 void recordEnv();
 void checkSources();

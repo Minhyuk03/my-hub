@@ -10,7 +10,9 @@ import { shortPath } from "@/lib/format";
 import { PROJECT_KIND_LABEL, PROJECT_STATUS_LABEL } from "@/lib/project-labels";
 import { getDb } from "@/server/db";
 import { projects } from "@/server/db/schema";
-import { excludedItems, projectFolderList, projectItemList } from "@/server/projects";
+import { excludedItems, projectCategoryCounts, projectFolderList, projectItemList } from "@/server/projects";
+import { categoryFilter, isCategory } from "@/server/category";
+import { CategoryFilter } from "@/components/category-filter";
 import { ConfirmSubmit } from "@/app/settings/confirm-submit";
 import { deleteProjectAction, itemRuleAction, saveProjectAction, toggleSubfoldersAction, unlinkFolderAction } from "../actions";
 import { FolderLinker } from "./folder-linker";
@@ -41,9 +43,11 @@ export default async function ProjectPage({ params, searchParams }: PageProps<"/
   const p = db.select().from(projects).where(eq(projects.id, Number(id))).get();
   if (!p) notFound();
   const sourceFilter = typeof sp.source === "string" ? Number(sp.source) : undefined;
+  const cats = categoryFilter((Array.isArray(sp.cat) ? sp.cat : sp.cat ? [sp.cat] : []).filter(isCategory));
+  const catCounts = projectCategoryCounts(db, p.id);
   const fl = projectFolderList(db, p.id);
   const all = projectItemList(db, p.id, { limit: 300 });
-  const list = sourceFilter ? projectItemList(db, p.id, { sourceIds: [sourceFilter], limit: 300 }) : all;
+  const list = sourceFilter || cats ? projectItemList(db, p.id, { sourceIds: sourceFilter ? [sourceFilter] : undefined, categories: cats, limit: 300 }) : all;
   const excluded = excludedItems(db, p.id);
   const sourcesInProject = [...new Map(all.items.map((i) => [i.sourceId, { id: i.sourceId, name: i.sourceName, kind: i.sourceKind }])).values()];
 
@@ -102,6 +106,7 @@ export default async function ProjectPage({ params, searchParams }: PageProps<"/
                   ))}
                 </div>
               )}
+              <CategoryFilter inline counts={catCounts} className="pt-2" />
             </CardHeader>
             <CardContent>
               {!list.items.length && <p className="text-sm text-muted-foreground">연결된 항목이 없습니다. 오른쪽에서 폴더를 연결하세요.</p>}

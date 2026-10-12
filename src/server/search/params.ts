@@ -1,5 +1,6 @@
 import type { ItemKind } from "../extract";
 import type { SearchFilters } from "./query";
+import { categoryFilter, isCategory } from "../category";
 
 type Params = { get(k: string): string | null; getAll(k: string): string[] };
 
@@ -21,6 +22,7 @@ export function parseFilters(sp: Params): SearchFilters {
     modifiedAfter: range && DATE_RANGES[range] ? Date.now() - DATE_RANGES[range].ms : undefined,
     tag: sp.get("tag") || undefined,
     projectId: Number(sp.get("project")) || undefined,
+    categories: categoryFilter(sp.getAll("cat").filter(isCategory)),
   };
 }
 

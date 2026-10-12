@@ -44,6 +44,10 @@ export function vectorSearch(db: Db, qv: Float32Array, filters: SearchFilters, k
     where.push(`i.modified_at >= ?`);
     params.push(filters.modifiedAfter);
   }
+  if (filters.categories?.length) {
+    where.push(`i.category IN (${filters.categories.map(() => "?").join(",")})`);
+    params.push(...filters.categories);
+  }
   if (filters.tag) {
     where.push(`i.id IN (SELECT it.item_id FROM v_item_tags it JOIN tags g ON g.id = it.tag_id WHERE g.name = ?)`);
     params.push(nfc(filters.tag));

@@ -1,6 +1,7 @@
 import type { Db } from "../db";
 import type { ItemKind } from "../extract";
 import { membershipSql } from "../projects";
+import type { Category } from "../category";
 import { nfc, quote, tokenize } from "./text";
 
 export type SearchFilters = {
@@ -10,6 +11,8 @@ export type SearchFilters = {
   modifiedAfter?: number;
   tag?: string;
   projectId?: number;
+  /** 보기용 분류 (문서·노트·코드·데이터·사진영상소리·기타). 비어 있으면 전부 */
+  categories?: Category[];
 };
 
 export type SearchHit = {
@@ -79,6 +82,10 @@ export function search(db: Db, query: string, filters: SearchFilters = {}, limit
   if (filters.modifiedAfter) {
     where.push(`i.modified_at >= ?`);
     whereParams.push(filters.modifiedAfter);
+  }
+  if (filters.categories?.length) {
+    where.push(`i.category IN (${filters.categories.map(() => "?").join(",")})`);
+    whereParams.push(...filters.categories);
   }
   if (filters.projectId) {
     const m = membershipSql(db, filters.projectId);

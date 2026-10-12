@@ -7,6 +7,10 @@ import { useEffect, useRef, useState } from "react";
 import { Highlighted, SourceIcon, StateBadge } from "@/components/hub-ui";
 import { relTime, shortPath } from "@/lib/format";
 import type { SearchHit } from "@/server/search/query";
+import { savedCategories } from "./category-filter";
+
+/** 검색 화면에서 고른 분류(기억해 둔 것)를 ⌘K 검색에도 쓴다 */
+const catQuery = () => (savedCategories() ?? []).map((c) => `&cat=${c}`).join("");
 
 /** 상단 검색창 + ⌘K 어디서든 열리는 검색 */
 export function SearchPalette() {
@@ -36,7 +40,7 @@ export function SearchPalette() {
     const t = setTimeout(async () => {
       setLoading(true);
       try {
-        const r = await fetch(`/api/search?q=${encodeURIComponent(q)}&limit=15`).then((r) => r.json());
+        const r = await fetch(`/api/search?q=${encodeURIComponent(q)}&limit=15${catQuery()}`).then((r) => r.json());
         if (my === seq.current) {
           setHits(r.hits);
           setTotal(r.total);
@@ -109,7 +113,7 @@ export function SearchPalette() {
               {q.trim() && total > shown.length && (
                 <Command.Item
                   value="__all"
-                  onSelect={() => go(`/search?q=${encodeURIComponent(q)}`)}
+                  onSelect={() => go(`/search?q=${encodeURIComponent(q)}${catQuery()}`)}
                   className="cursor-pointer rounded-md px-2 py-2 text-sm text-muted-foreground data-[selected=true]:bg-muted"
                 >
                   전체 결과 {total.toLocaleString()}건 보기 (필터 사용) →
