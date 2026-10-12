@@ -47,4 +47,11 @@ export const DEFAULT_EXCLUDED_PATTERNS = [
   "id_rsa*",
   "id_ed25519*",
   "*.keychain*",
+  // 개발 도구가 자동으로 받아 두는 라이브러리·빌드 폴더 (직접 만든 파일이 아니라 검색·중복·AI 정리를 어지럽힌다)
+  "Pods",
+  "venv",
+  "site-packages",
+  "build",
+  "DerivedData",
+  "__pycache__",
 ];
