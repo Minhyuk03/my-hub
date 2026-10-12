@@ -54,4 +54,6 @@ export const DEFAULT_EXCLUDED_PATTERNS = [
   "build",
   "DerivedData",
   "__pycache__",
+  "cmake-build-*", // CLion 빌드 폴더 (cmake-build-debug, cmake-build-release …)
+  "xcuserdata", // Xcode 사용자별 창 상태
 ];
