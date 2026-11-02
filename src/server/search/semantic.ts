@@ -115,11 +115,11 @@ export async function hybridSearch(
   mode: "hybrid" | "keyword" | "semantic" = "hybrid",
 ): Promise<HybridResult> {
   const t0 = performance.now();
-  const kw = mode === "semantic" ? null : search(db, query, filters, 200, 0);
   if (mode === "keyword" || !ai || !query.trim()) {
     const r = search(db, query, filters, limit, offset);
     return { ...r, mode: "keyword" };
   }
+  const kw = mode === "semantic" ? null : search(db, query, filters, 200, 0);
   const qv = await embedQuery(ai, model, query);
   if (!qv) {
     const r = search(db, query, filters, limit, offset);

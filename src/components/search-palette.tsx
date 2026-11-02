@@ -19,6 +19,7 @@ export function SearchPalette() {
   const [hits, setHits] = useState<SearchHit[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const router = useRouter();
   const seq = useRef(0);
 
@@ -40,10 +41,21 @@ export function SearchPalette() {
     const t = setTimeout(async () => {
       setLoading(true);
       try {
-        const r = await fetch(`/api/search?q=${encodeURIComponent(q)}&limit=15${catQuery()}`).then((r) => r.json());
+        const res = await fetch(`/api/search?q=${encodeURIComponent(q)}&limit=15${catQuery()}`);
+        // 잠금이 풀려 있지 않으면 서버가 JSON 대신 잠금 화면(HTML)을 돌려준다
+        if (!res.headers.get("content-type")?.includes("json")) throw new Error("잠금이 풀려 있지 않습니다. 새로 고침해 패스코드를 넣어 주세요.");
+        if (!res.ok) throw new Error(`서버 오류 ${res.status}`);
+        const r = (await res.json()) as { hits: SearchHit[]; total: number };
         if (my === seq.current) {
           setHits(r.hits);
           setTotal(r.total);
+          setError(null);
+        }
+      } catch (e) {
+        if (my === seq.current) {
+          setHits([]);
+          setTotal(0);
+          setError((e as Error).message);
         }
       } finally {
         if (my === seq.current) setLoading(false);
@@ -88,7 +100,8 @@ export function SearchPalette() {
               {loading && <span className="text-xs text-muted-foreground">검색 중</span>}
             </div>
             <Command.List className="max-h-[60vh] overflow-y-auto p-1">
-              {q.trim() && !loading && !shown.length && <Command.Empty className="p-4 text-sm text-muted-foreground">결과가 없습니다.</Command.Empty>}
+              {q.trim() && error && <p className="p-4 text-sm text-destructive">검색하지 못했습니다: {error}</p>}
+              {q.trim() && !loading && !error && !shown.length && <Command.Empty className="p-4 text-sm text-muted-foreground">결과가 없습니다.</Command.Empty>}
               {shown.map((h) => (
                 <Command.Item
                   key={h.id}
