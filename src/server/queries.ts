@@ -14,7 +14,7 @@ export type RecentItem = {
   sourceStatus: string;
 };
 
-export function recentItems(db: Db, since: number, limit = 60): RecentItem[] {
+export function recentItems(db: Db, since: number, limit = 60, categories?: string[]): RecentItem[] {
   return db
     .select({
       id: items.id,
@@ -29,10 +29,18 @@ export function recentItems(db: Db, since: number, limit = 60): RecentItem[] {
     })
     .from(items)
     .innerJoin(sources, eq(sources.id, items.sourceId))
-    .where(and(ne(items.state, "deleted"), gte(items.modifiedAt, since)))
+    .where(recentWhere(since, categories))
     .orderBy(desc(items.modifiedAt))
     .limit(limit)
     .all();
+}
+
+const recentWhere = (since: number, categories?: string[]) =>
+  and(ne(items.state, "deleted"), gte(items.modifiedAt, since), categories?.length ? inArray(items.category, categories) : undefined);
+
+/** recentItems 와 같은 조건의 전체 개수 */
+export function recentCount(db: Db, since: number, categories?: string[]): number {
+  return db.select({ n: sql<number>`count(*)` }).from(items).where(recentWhere(since, categories)).get()?.n ?? 0;
 }
 
 /** 최근 수정이 많은 폴더 (프로젝트 기능 전까지 "이어서 작업하기"로 사용) */

@@ -4,7 +4,7 @@ import { headers } from "next/headers";
 import { notFound } from "next/navigation";
 import { connection } from "next/server";
 import path from "node:path";
-import { and, desc, eq, gt, lt, ne } from "drizzle-orm";
+import { and, asc, count, desc, eq, gt, lt, ne } from "drizzle-orm";
 import { ItemRow, SourceIcon } from "@/components/hub-ui";
 import { Button } from "@/components/ui/button";
 import { shortPath } from "@/lib/format";
@@ -28,9 +28,16 @@ function folderInherited(db: Db, f: { id: number; path: string }, s: { name: str
 }
 import { folderUrl } from "@/server/connectors/gdrive/client";
 
-export default async function FolderPage({ params }: PageProps<"/folders/[id]">) {
+const PAGE = 200;
+const SORTS = { date: "최근 수정", name: "이름", size: "크기" } as const;
+type Sort = keyof typeof SORTS;
+
+export default async function FolderPage({ params, searchParams }: PageProps<"/folders/[id]">) {
   await connection();
   const { id } = await params;
+  const sp = await searchParams;
+  const sort: Sort = typeof sp.sort === "string" && sp.sort in SORTS ? (sp.sort as Sort) : "date";
+  const page = Math.max(1, Number(sp.page) || 1);
   const db = getDb();
   const row = db.select({ f: folders, s: sources }).from(folders).innerJoin(sources, eq(sources.id, folders.sourceId)).where(eq(folders.id, Number(id))).get();
   if (!row) notFound();
@@ -42,13 +49,23 @@ export default async function FolderPage({ params }: PageProps<"/folders/[id]">)
     .all()
     .filter((x) => path.dirname(x.path) === f.path)
     .sort((a, b) => a.name.localeCompare(b.name, "ko"));
+  const inFolder = and(eq(items.folderId, f.id), ne(items.state, "deleted"));
+  const total = db.select({ n: count() }).from(items).where(inFolder).get()?.n ?? 0;
   const list = db
     .select()
     .from(items)
-    .where(and(eq(items.folderId, f.id), ne(items.state, "deleted")))
-    .orderBy(desc(items.modifiedAt))
-    .limit(500)
+    .where(inFolder)
+    .orderBy(sort === "name" ? asc(items.title) : sort === "size" ? desc(items.size) : desc(items.modifiedAt))
+    .limit(PAGE)
+    .offset((page - 1) * PAGE)
     .all();
+  const href = (o: { sort?: Sort; page?: number }) => {
+    const u = new URLSearchParams();
+    const so = o.sort ?? sort;
+    if (so !== "date") u.set("sort", so);
+    if ((o.page ?? 1) > 1) u.set("page", String(o.page));
+    return `/folders/${f.id}${u.size ? `?${u}` : ""}`;
+  };
   const parent = db.select().from(folders).where(eq(folders.path, path.dirname(f.path))).get();
   const pinned = db.select().from(shortcuts).where(and(eq(shortcuts.kind, "folder"), eq(shortcuts.target, String(f.id)))).get();
   const projectRows = db.select().from(projects).all();
@@ -123,12 +140,37 @@ export default async function FolderPage({ params }: PageProps<"/folders/[id]">)
           ))}
         </div>
       )}
+      {total > 0 && (
+        <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+          <span>파일 {total.toLocaleString()}개{total > PAGE && ` · ${(page - 1) * PAGE + 1}–${Math.min(page * PAGE, total)}`}</span>
+          <span className="ml-auto">정렬</span>
+          {(Object.keys(SORTS) as Sort[]).map((k) => (
+            <Link key={k} href={href({ sort: k })} className={`rounded-full border px-2 py-0.5 ${k === sort ? "border-primary bg-primary text-primary-foreground" : "hover:bg-muted"}`}>
+              {SORTS[k]}
+            </Link>
+          ))}
+        </div>
+      )}
       <div className="divide-y">
         {list.map((i) => (
           <ItemRow key={i.id} item={{ ...i, sourceKind: s.kind, sourceStatus: s.status }} />
         ))}
         {!list.length && <p className="py-2 text-sm text-muted-foreground">이 폴더에 바로 들어 있는 파일이 없습니다.</p>}
       </div>
+      {total > PAGE && (
+        <div className="flex gap-3 text-sm">
+          {page > 1 && (
+            <Link href={href({ page: page - 1 })} className="underline">
+              ← 이전
+            </Link>
+          )}
+          {page * PAGE < total && (
+            <Link href={href({ page: page + 1 })} className="underline">
+              다음 →
+            </Link>
+          )}
+        </div>
+      )}
     </div>
   );
 }
