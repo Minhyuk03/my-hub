@@ -373,10 +373,16 @@ function doBackup(): string {
   const s = getSettings(db);
   const env = realBackupEnv();
   const b = createBackup(db, s.backupDir, env);
+  backupFailedAt = 0;
+  db.delete(runtime).where(eq(runtime.key, "backup_error")).run(); // 화면의 실패 경고를 지운다
   const removed = b.location === "disk" ? applyRetention(db, s.backupDir, s.backupKeepDaily, s.backupKeepWeekly, Date.now()) : [];
   log("백업 완료", b.path, b.location === "pending" ? "(외장 디스크 없음: 임시 보관)" : "", removed.length ? `정리 ${removed.length}개` : "");
   return b.path;
 }
+
+/** 자동 백업이 실패하면 30분 뒤에 다시 시도 (1분마다 같은 오류를 쌓지 않게) */
+const BACKUP_RETRY_MS = 30 * 60_000;
+let backupFailedAt = 0;
 
 function maybeBackup() {
   const s = getSettings(db);
@@ -385,10 +391,13 @@ function maybeBackup() {
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
   const done = db.select().from(backups).where(and(gte(backups.createdAt, today))).get();
   if (done) return;
+  if (Date.now() - backupFailedAt < BACKUP_RETRY_MS) return;
   try {
     doBackup();
   } catch (e) {
+    backupFailedAt = Date.now();
     log("백업 실패", (e as Error).message);
+    setRuntime("backup_error", { message: (e as Error).message, at: Date.now() });
   }
 }
 

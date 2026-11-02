@@ -161,3 +161,15 @@ export function envSnapshot(db: Db): EnvSnapshot | null {
   const row = db.select().from(runtime).where(eq(runtime.key, "env")).get();
   return row ? (row.value as EnvSnapshot) : null;
 }
+
+/** 백업이 이보다 오래되면 경고 (매일 백업이므로 하루 + 여유) */
+export const BACKUP_STALE_MS = 30 * 3600_000;
+
+/** 마지막 백업 시각(외장·임시 보관 포함), 오래됐는지, 마지막 자동 백업 오류 */
+export function backupHealth(db: Db, now = Date.now()) {
+  const env = envSnapshot(db);
+  const times = [...(env?.backups ?? []), ...(env?.pending ?? [])].map((b) => b.createdAt);
+  const lastAt = times.length ? Math.max(...times) : null;
+  const err = db.select().from(runtime).where(eq(runtime.key, "backup_error")).get()?.value as { message: string; at: number } | undefined;
+  return { lastAt, stale: !lastAt || now - lastAt > BACKUP_STALE_MS, error: err ?? null };
+}

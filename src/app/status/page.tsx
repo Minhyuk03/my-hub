@@ -6,7 +6,7 @@ import { Progress } from "@/components/ui/progress";
 import { bytes, fullDate, relTime, shortPath, untilTime } from "@/lib/format";
 import { ITEM_STATE_LABEL, SOURCE_KIND_LABEL } from "@/lib/labels";
 import { getDb } from "@/server/db";
-import { envSnapshot, errorList, sourcesWithStats, workerStatus } from "@/server/queries";
+import { backupHealth, envSnapshot, errorList, sourcesWithStats, workerStatus } from "@/server/queries";
 import { getSettings } from "@/server/settings";
 import { AutoRefresh } from "./auto-refresh";
 import { CommandButton } from "@/components/command-button";
@@ -24,6 +24,7 @@ export default async function StatusPage() {
   const diskBackups = env?.backups ?? [];
   const pending = env?.pending ?? [];
   const syncing = srcs.some((s) => s.status === "syncing");
+  const backup = backupHealth(db);
 
   return (
     <div className="space-y-4">
@@ -32,9 +33,22 @@ export default async function StatusPage() {
       <div className="flex flex-wrap items-center gap-2">
         <h1 className="text-xl font-semibold">동기화 상태</h1>
         <span className={worker.alive ? "text-sm text-muted-foreground" : "text-sm text-destructive"}>
-          인덱서 {worker.alive ? `실행 중 (마지막 응답 ${relTime(worker.updatedAt)})` : "멈춤 — 터미널에서 npm run hub 로 시작하세요"}
+          인덱서 {worker.alive ? `실행 중 (마지막 응답 ${relTime(worker.updatedAt)})` : "멈춤 — 터미널에서 hub restart 로 다시 시작하세요"}
         </span>
       </div>
+
+      {(backup.error || backup.stale) && (
+        <div role="alert" className="rounded-md border border-destructive/50 bg-destructive/10 px-4 py-3 text-sm">
+          <p className="font-medium text-destructive">
+            {backup.lastAt ? `마지막 백업이 ${relTime(backup.lastAt)}입니다.` : "백업이 아직 없습니다."} 아래 DB 백업에서 “지금 백업”을 눌러 보세요.
+          </p>
+          {backup.error && (
+            <p className="mt-1 break-all text-destructive">
+              자동 백업 실패 ({relTime(backup.error.at)}): {backup.error.message}
+            </p>
+          )}
+        </div>
+      )}
 
       <div className="grid gap-4 md:grid-cols-2">
         {srcs.map((s) => {

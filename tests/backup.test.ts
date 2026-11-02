@@ -4,8 +4,9 @@ import Database from "better-sqlite3";
 import { describe, expect, it } from "vitest";
 import { applyRetention, createBackup, flushPending, listBackups, restoreBackup, selectRetained, verifyDbFile } from "@/server/backup";
 import { openDb } from "@/server/db";
-import { items } from "@/server/db/schema";
-import { addSource, fakeVolume, tmpDir } from "./helpers";
+import { items, runtime } from "@/server/db/schema";
+import { backupHealth } from "@/server/queries";
+import { addSource, fakeVolume, testDb, tmpDir } from "./helpers";
 
 function setup() {
   const dir = tmpDir();
@@ -91,5 +92,28 @@ describe("백업·복원 (8장)", () => {
     const bad = path.join(s.dir, "hub-20260101-000000.db");
     fs.writeFileSync(bad, "not sqlite");
     expect(() => restoreBackup(bad, s.dbFile)).toThrow();
+  });
+});
+
+describe("백업 상태 경고", () => {
+  const env = (createdAt: number[], pending: number[] = []) => ({
+    volumes: [],
+    backups: createdAt.map((t) => ({ name: `b${t}`, path: `/b${t}`, createdAt: t, size: 1 })),
+    pending: pending.map((t) => ({ name: `p${t}`, path: `/p${t}`, createdAt: t, size: 1 })),
+    at: 0,
+  });
+  const put = (db: ReturnType<typeof testDb>, key: string, value: unknown) =>
+    db.insert(runtime).values({ key, value, updatedAt: 0 }).onConflictDoUpdate({ target: runtime.key, set: { value } }).run();
+
+  it("마지막 백업(임시 보관 포함)이 30시간을 넘으면 오래됨, 자동 백업 오류도 함께", () => {
+    const db = testDb();
+    const now = 100 * 3600_000;
+    expect(backupHealth(db, now)).toEqual({ lastAt: null, stale: true, error: null });
+    put(db, "env", env([now - 40 * 3600_000]));
+    expect(backupHealth(db, now).stale).toBe(true);
+    put(db, "env", env([now - 40 * 3600_000], [now - 2 * 3600_000]));
+    expect(backupHealth(db, now)).toMatchObject({ lastAt: now - 2 * 3600_000, stale: false });
+    put(db, "backup_error", { message: "디스크 가득 참", at: now });
+    expect(backupHealth(db, now).error).toEqual({ message: "디스크 가득 참", at: now });
   });
 });
