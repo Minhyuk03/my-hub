@@ -55,7 +55,6 @@ export function search(db: Db, query: string, filters: SearchFilters = {}, limit
   const one = terms.filter((t) => t.length === 1);
   const parts: string[] = [];
   const params: unknown[] = []; // 후보(CTE) 조건
-  const whereParams: unknown[] = []; // 필터 조건
   if (long.length) {
     parts.push(`SELECT rowid AS id FROM items_fts WHERE items_fts MATCH ?`);
     params.push(long.map(quote).join(" AND "));
@@ -70,32 +69,7 @@ export function search(db: Db, query: string, filters: SearchFilters = {}, limit
     params.push(like, like, like);
   }
 
-  const where: string[] = [`i.state != 'deleted'`];
-  if (filters.sourceIds?.length) {
-    where.push(`i.source_id IN (${filters.sourceIds.map(() => "?").join(",")})`);
-    whereParams.push(...filters.sourceIds);
-  }
-  if (filters.kinds?.length) {
-    where.push(`i.kind IN (${filters.kinds.map(() => "?").join(",")})`);
-    whereParams.push(...filters.kinds);
-  }
-  if (filters.modifiedAfter) {
-    where.push(`i.modified_at >= ?`);
-    whereParams.push(filters.modifiedAfter);
-  }
-  if (filters.categories?.length) {
-    where.push(`i.category IN (${filters.categories.map(() => "?").join(",")})`);
-    whereParams.push(...filters.categories);
-  }
-  if (filters.projectId) {
-    const m = membershipSql(db, filters.projectId);
-    where.push(`i.id IN (${m.sql})`);
-    whereParams.push(...m.params);
-  }
-  if (filters.tag) {
-    where.push(`i.id IN (SELECT it.item_id FROM v_item_tags it JOIN tags g ON g.id = it.tag_id WHERE g.name = ?)`);
-    whereParams.push(nfc(filters.tag));
-  }
+  const { where, params: whereParams } = filterWhere(db, filters);
 
   // 1단계: 가벼운 열(items)만으로 정렬·페이지를 정한다. 본문은 읽지 않는다.
   const titleScore = terms.map(() => `(instr(lower(i.title), ?) > 0)`).join(" + ");
@@ -136,6 +110,63 @@ export function search(db: Db, query: string, filters: SearchFilters = {}, limit
   }));
   const total = rows[0]?.total ?? 0;
   return { hits, total, capped: total >= MAX_CANDIDATES, tookMs: performance.now() - t0, terms };
+}
+
+/** 검색 필터를 SQL 조건으로 (items 별칭 i) */
+function filterWhere(db: Db, filters: SearchFilters): { where: string[]; params: unknown[] } {
+  const params: unknown[] = [];
+  const where: string[] = [`i.state != 'deleted'`];
+  if (filters.sourceIds?.length) {
+    where.push(`i.source_id IN (${filters.sourceIds.map(() => "?").join(",")})`);
+    params.push(...filters.sourceIds);
+  }
+  if (filters.kinds?.length) {
+    where.push(`i.kind IN (${filters.kinds.map(() => "?").join(",")})`);
+    params.push(...filters.kinds);
+  }
+  if (filters.modifiedAfter) {
+    where.push(`i.modified_at >= ?`);
+    params.push(filters.modifiedAfter);
+  }
+  if (filters.categories?.length) {
+    where.push(`i.category IN (${filters.categories.map(() => "?").join(",")})`);
+    params.push(...filters.categories);
+  }
+  if (filters.projectId) {
+    const m = membershipSql(db, filters.projectId);
+    where.push(`i.id IN (${m.sql})`);
+    params.push(...m.params);
+  }
+  if (filters.tag) {
+    where.push(`i.id IN (SELECT it.item_id FROM v_item_tags it JOIN tags g ON g.id = it.tag_id WHERE g.name = ?)`);
+    params.push(nfc(filters.tag));
+  }
+  return { where, params };
+}
+
+/** 검색어 없이 필터만 고른 경우가 있는지 (분류는 늘 기억돼 있어 제외) */
+export function hasBrowseFilter(f: SearchFilters) {
+  return !!(f.sourceIds?.length || f.kinds?.length || f.modifiedAfter || f.tag || f.projectId);
+}
+
+/** 검색어 없이 필터로 고른 항목을 최근 수정 순으로 (태그·프로젝트·소스 목록 보기) */
+export function browse(db: Db, filters: SearchFilters, limit = 30, offset = 0): SearchResult {
+  const t0 = performance.now();
+  const { where, params } = filterWhere(db, filters);
+  type Row = Omit<SearchHit, "snippet" | "highlights"> & { total: number };
+  const rows = db.$client
+    .prepare(
+      `SELECT i.id, i.title, i.path, i.kind, i.ext, i.state, i.no_content_reason AS noContentReason,
+              i.modified_at AS modifiedAt, i.source_id AS sourceId,
+              s.name AS sourceName, s.kind AS sourceKind, s.status AS sourceStatus, count(*) OVER () AS total
+       FROM items i JOIN sources s ON s.id = i.source_id
+       WHERE ${where.join(" AND ")}
+       ORDER BY i.modified_at DESC
+       LIMIT ? OFFSET ?`,
+    )
+    .all(...params, limit, offset) as Row[];
+  const hits: SearchHit[] = rows.map((row) => ({ ...row, snippet: "", highlights: [] }));
+  return { hits, total: rows[0]?.total ?? 0, capped: false, tookMs: performance.now() - t0, terms: [] };
 }
 
 /** 본문에서 첫 검색어 주변을 잘라 하이라이트 위치와 함께 돌려준다 */

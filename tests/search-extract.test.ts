@@ -3,7 +3,7 @@ import path from "node:path";
 import { strToU8, zipSync } from "fflate";
 import { describe, expect, it } from "vitest";
 import { extractText, hwpxText, markdown } from "@/server/extract";
-import { search } from "@/server/search/query";
+import { browse, hasBrowseFilter, search } from "@/server/search/query";
 import { checkNewFolder, checkNewSource, matchPattern } from "@/server/sources/rules";
 import { runScan } from "@/server/sync/scanner";
 import { addSource, deps, testDb, tmpDir, write } from "./helpers";
@@ -160,3 +160,28 @@ function minimalPdf(text: string): Buffer {
   out += `trailer\n<< /Size ${objs.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`;
   return Buffer.from(out, "latin1");
 }
+
+describe("검색어 없이 필터로 보기", () => {
+  it("태그만 골라도 그 태그가 붙은 항목을 모두 최근 수정 순으로 (본문에 태그 글자가 없어도)", async () => {
+    const db = testDb();
+    const root = tmpDir();
+    write(root, "a.md", "---\ntags: [여행]\n---\n제주 일정");
+    write(root, "b.md", "#여행 부산");
+    write(root, "c.md", "관계없는 노트");
+    const src = addSource(db, root);
+    await runScan(db, src.id, deps());
+    fs.utimesSync(path.join(root, "a.md"), new Date(2026, 0, 1), new Date(2026, 0, 1));
+    await runScan(db, src.id, deps());
+    expect(search(db, "여행", { tag: "여행" }).total).toBe(1); // 예전 태그 링크: 본문에 "여행" 이 있는 것만
+    const r = browse(db, { tag: "여행" });
+    expect(r.total).toBe(2);
+    expect(r.hits.map((h) => path.basename(h.path))).toEqual(["b.md", "a.md"]);
+    expect(browse(db, { sourceIds: [src.id] }, 2).hits).toHaveLength(2);
+    expect(browse(db, { sourceIds: [src.id] }, 2).total).toBe(3);
+  });
+
+  it("분류만 있으면 목록 보기를 하지 않는다", () => {
+    expect(hasBrowseFilter({ categories: ["doc"] as never })).toBe(false);
+    expect(hasBrowseFilter({ projectId: 1 })).toBe(true);
+  });
+});

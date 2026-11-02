@@ -219,7 +219,7 @@ export function GraphView({ opts, reloadKey }: { opts: GraphOptionsState; reload
           setHover(n ?? null);
         })
         .onNodeClick((n) => {
-          if (n.type === "tag") router.push(`/search?q=${encodeURIComponent(n.tag!)}&tag=${encodeURIComponent(n.tag!)}`);
+          if (n.type === "tag") router.push(`/search?tag=${encodeURIComponent(n.tag!)}`);
           else if (n.itemId) router.push(`/items/${n.itemId}`);
         })
         // 다크 모드: 태그·연결 많은 문서 주위에 빛을 퍼뜨린다. 빛이 겹칠수록(더하기 합성) 밝아져 자료가 몰린 곳이 성운처럼 보인다.

@@ -10,6 +10,7 @@ import { tagEmojiMap, tagWithEmoji } from "@/server/graph";
 import { projects } from "@/server/db/schema";
 import { DATE_RANGES, fromRecord, parseFilters } from "@/server/search/params";
 import { hybridSearch } from "@/server/search/semantic";
+import { browse, hasBrowseFilter } from "@/server/search/query";
 import { markForeground } from "@/server/ai/foreground";
 import { CategoryFilter } from "@/components/category-filter";
 import { Ollama, realOllama } from "@/server/ai/ollama";
@@ -31,7 +32,13 @@ export default async function SearchPage({ searchParams }: PageProps<"/search">)
   const hasVectors = (db.$client.prepare(`SELECT count(*) FROM item_chunk_state`).pluck().get() as number) > 0;
   const ai = hasVectors ? new Ollama(realOllama()) : null;
   if (q.trim() && hasVectors && mode !== "keyword") markForeground(db, 2 * 60_000);
-  const r = q.trim() ? await hybridSearch(db, ai, st.aiEmbedModel, q, filters, PAGE, (page - 1) * PAGE, hasVectors ? mode : "keyword") : null;
+  // 검색어가 없어도 소스·날짜·프로젝트·태그를 골랐으면 그 항목을 최근 수정 순으로 보여 준다
+  const browsing = !q.trim() && hasBrowseFilter(filters);
+  const r = q.trim()
+    ? await hybridSearch(db, ai, st.aiEmbedModel, q, filters, PAGE, (page - 1) * PAGE, hasVectors ? mode : "keyword")
+    : browsing
+      ? { ...browse(db, filters, PAGE, (page - 1) * PAGE), mode: "browse" as const, semanticNote: undefined }
+      : null;
   const modeHref = (m: string) => {
     const u = new URLSearchParams();
     for (const [k, v] of Object.entries(sp)) for (const x of Array.isArray(v) ? v : v ? [v] : []) if (k !== "page" && k !== "mode") u.append(k, x);
@@ -132,12 +139,12 @@ export default async function SearchPage({ searchParams }: PageProps<"/search">)
             {hasVectors ? "의미 검색: 낱말이 달라도 뜻이 비슷한 문서를 찾습니다" : "의미 검색은 AI 정리를 켜면 쓸 수 있습니다"}
           </span>
         </div>
-        {!r && <p className="text-sm text-muted-foreground">검색어를 입력하세요. 어디서든 ⌘K 로 검색창을 열 수 있습니다.</p>}
+        {!r && <p className="text-sm text-muted-foreground">검색어를 입력하거나 왼쪽에서 필터를 고르세요. 어디서든 ⌘K 로 검색창을 열 수 있습니다.</p>}
         {r && (
           <>
             <p className="mb-2 text-xs text-muted-foreground">
               {r.total.toLocaleString()}
-              {r.capped ? "+" : ""}건 · {r.tookMs.toFixed(0)}ms · {r.mode === "hybrid" ? "섞어서" : r.mode === "semantic" ? "의미" : "키워드"}
+              {r.capped ? "+" : ""}건 · {r.tookMs.toFixed(0)}ms · {r.mode === "browse" ? "검색어 없이 필터로 고름 · 최근 수정 순" : r.mode === "hybrid" ? "섞어서" : r.mode === "semantic" ? "의미" : "키워드"}
               {r.capped && " (결과가 많아 일부만 정렬했습니다. 검색어나 필터를 더 구체적으로 입력하세요)"}
               {r.semanticNote && <span className="text-amber-600 dark:text-amber-400"> · {r.semanticNote}</span>}
             </p>

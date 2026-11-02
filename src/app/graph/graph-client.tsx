@@ -73,7 +73,7 @@ function TagPane({ tags, onChange }: { tags: TagMain[]; onChange: () => void }) 
             <button type="button" onClick={() => setEdit(edit === t.name ? null : t.name)} className="w-6 text-center text-base" title="이모지 설정">
               {t.emoji ?? <span className="text-xs text-muted-foreground">＋</span>}
             </button>
-            <a href={`/search?q=${encodeURIComponent(t.name)}&tag=${encodeURIComponent(t.name)}`} className="flex-1 truncate hover:underline">
+            <a href={`/search?tag=${encodeURIComponent(t.name)}`} className="flex-1 truncate hover:underline">
               {t.name}
             </a>
             <span className="text-xs text-muted-foreground">{t.count}</span>
@@ -90,7 +90,7 @@ function TagPane({ tags, onChange }: { tags: TagMain[]; onChange: () => void }) 
           )}
           {open === t.name &&
             t.children.map((c) => (
-              <a key={c.name} href={`/search?q=${encodeURIComponent(c.name)}&tag=${encodeURIComponent(c.name)}`} className="flex items-center gap-1 rounded py-0.5 pl-12 pr-1 hover:bg-muted">
+              <a key={c.name} href={`/search?tag=${encodeURIComponent(c.name)}`} className="flex items-center gap-1 rounded py-0.5 pl-12 pr-1 hover:bg-muted">
                 <span className="flex-1 truncate">{c.name.slice(t.name.length + 1)}</span>
                 <span className="text-xs text-muted-foreground">{c.count}</span>
               </a>

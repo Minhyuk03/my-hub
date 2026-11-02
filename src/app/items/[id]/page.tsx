@@ -153,7 +153,7 @@ export default async function ItemPage({ params, searchParams }: PageProps<"/ite
         {tags.length > 0 && (
           <div className="flex flex-wrap gap-1 pt-1">
             {tags.map((t) => (
-              <a key={t} href={`/search?q=${encodeURIComponent(t)}&tag=${encodeURIComponent(t)}`}>
+              <a key={t} href={`/search?tag=${encodeURIComponent(t)}`}>
                 <Badge variant="secondary">{tagEmoji.get(mainTagOf(t)) ? `${tagEmoji.get(mainTagOf(t))} ` : ""}#{t}</Badge>
               </a>
             ))}
