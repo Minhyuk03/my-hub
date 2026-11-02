@@ -174,3 +174,9 @@
     border-color 500ms ease-in-out,
     fill 500ms ease-in-out !important;
 }
+
+/* 첫 화면: 섹션 단위로 맞춰 스크롤 (조금만 굴려도 다음 섹션이 가운데로). src/components/hero-fx.tsx 가 켜고 끈다 */
+html.snap-page { scroll-snap-type: y mandatory; }
+@media (prefers-reduced-motion: no-preference) {
+  html.snap-page { scroll-behavior: smooth; }
+}
