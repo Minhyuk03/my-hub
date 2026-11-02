@@ -12,6 +12,7 @@ import { getDb } from "@/server/db";
 import { runtime } from "@/server/db/schema";
 import { tagEmojiMap } from "@/server/graph";
 import { getSettings } from "@/server/settings";
+import { CommandButton } from "@/components/command-button";
 import { acceptProject, acceptProjectsAll, acceptTagsAll, rejectAi, runAiNow, saveAiSettings, setAiEnabled } from "./actions";
 import { TagChips } from "./tag-chips";
 import { ChatUpload } from "./chat-upload";
@@ -86,11 +87,7 @@ export default async function AiPage() {
             상태: {s.aiEnabled ? (STATUS[last?.status ?? "ok"] ?? last?.status) : "꺼짐"}
             <span className="ml-auto flex gap-2">
               {s.aiEnabled && (
-                <form action={runAiNow}>
-                  <Button type="submit" size="sm" variant="outline">
-                    지금 실행
-                  </Button>
-                </form>
+                <CommandButton action={runAiNow} label="지금 실행" doneText="AI 정리를 시작했습니다. 잠시 뒤 새로 고치면 결과가 보입니다." />
               )}
               <form action={setAiEnabled.bind(null, !s.aiEnabled)}>
                 <Button type="submit" size="sm" variant={s.aiEnabled ? "ghost" : "default"}>

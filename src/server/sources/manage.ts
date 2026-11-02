@@ -68,8 +68,22 @@ export function removeSource(db: Db, sourceId: number) {
   enqueue(db, "source_removed", { sourceId });
 }
 
-export function enqueue(db: Db, kind: string, payload: Record<string, unknown> = {}) {
-  db.insert(commands).values({ kind, payload, createdAt: Date.now() }).run();
+export function enqueue(db: Db, kind: string, payload: Record<string, unknown> = {}): number {
+  return db.insert(commands).values({ kind, payload, createdAt: Date.now() }).returning({ id: commands.id }).get().id;
+}
+
+export type CommandOutcome = { done: boolean; result: string | null };
+
+/** 명령을 넣고 워커가 끝낼 때까지 잠시 기다린다. 시간 안에 안 끝나면 done=false (워커가 멈췄거나 오래 걸림) */
+export async function enqueueAndWait(db: Db, kind: string, payload: Record<string, unknown> = {}, timeoutMs = 20_000): Promise<CommandOutcome> {
+  const id = enqueue(db, kind, payload);
+  const until = Date.now() + timeoutMs;
+  for (;;) {
+    const row = db.select({ doneAt: commands.doneAt, result: commands.result }).from(commands).where(eq(commands.id, id)).get();
+    if (row?.doneAt) return { done: true, result: row.result };
+    if (Date.now() >= until) return { done: false, result: null };
+    await new Promise((r) => setTimeout(r, 300));
+  }
 }
 
 /** 처음 실행 시 Obsidian 볼트를 기본 소스로 등록한다 (한 번만) */

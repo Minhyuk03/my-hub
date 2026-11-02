@@ -1,20 +1,18 @@
 "use server";
 
-import { refresh } from "next/cache";
 import { getDb } from "@/server/db";
-import { enqueue } from "@/server/sources/manage";
+import { enqueueAndWait } from "@/server/sources/manage";
+
+// 워커가 처리할 때까지 기다렸다가 결과를 돌려준다 (화면의 CommandButton 이 보여 줌)
 
 export async function rescanSource(sourceId: number) {
-  enqueue(getDb(), "rescan", { sourceId });
-  refresh();
+  return enqueueAndWait(getDb(), "rescan", { sourceId });
 }
 
 export async function retryErrors(itemIds: number[]) {
-  enqueue(getDb(), "retry", { itemIds });
-  refresh();
+  return enqueueAndWait(getDb(), "retry", { itemIds }, 60_000);
 }
 
 export async function backupNow() {
-  enqueue(getDb(), "backup");
-  refresh();
+  return enqueueAndWait(getDb(), "backup", {}, 60_000);
 }

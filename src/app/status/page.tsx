@@ -1,7 +1,6 @@
 import { SettingsTabs } from "@/components/settings-tabs";
 import { connection } from "next/server";
 import { SourceIcon, SourceStatusBadge } from "@/components/hub-ui";
-import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { bytes, fullDate, relTime, shortPath, untilTime } from "@/lib/format";
@@ -10,6 +9,7 @@ import { getDb } from "@/server/db";
 import { envSnapshot, errorList, sourcesWithStats, workerStatus } from "@/server/queries";
 import { getSettings } from "@/server/settings";
 import { AutoRefresh } from "./auto-refresh";
+import { CommandButton } from "@/components/command-button";
 import { backupNow, rescanSource, retryErrors } from "./actions";
 
 export default async function StatusPage() {
@@ -75,11 +75,7 @@ export default async function StatusPage() {
                   마지막 전체 확인: {fullDate(s.lastFullScanAt)} {s.lastFullScanOk === false && "(실패)"}
                 </p>
                 <div className="flex gap-2 pt-1">
-                  <form action={rescanSource.bind(null, s.id)}>
-                    <Button type="submit" variant="outline" size="sm">
-                      지금 다시 확인
-                    </Button>
-                  </form>
+                  <CommandButton action={rescanSource.bind(null, s.id)} label="지금 다시 확인" doneText="다시 확인을 시작했습니다. 진행 상황은 이 카드에 표시됩니다." />
                   {s.errorCount > 0 && <span className="self-center text-destructive">오류 {s.errorCount}개</span>}
                 </div>
               </CardContent>
@@ -115,11 +111,7 @@ export default async function StatusPage() {
           </p>
           <p>마지막 백업: {diskBackups[0] ? `${fullDate(diskBackups[0].createdAt)} (${bytes(diskBackups[0].size)})` : "없음"}</p>
           {pending.length > 0 && <p className="text-destructive">외장 디스크가 없어 내장 디스크에 임시 보관 중인 백업 {pending.length}개 (디스크 연결 시 자동 이동)</p>}
-          <form action={backupNow}>
-            <Button type="submit" variant="outline" size="sm">
-              지금 백업
-            </Button>
-          </form>
+          <CommandButton action={backupNow} label="지금 백업" doneText="백업했습니다:" showResult />
         </CardContent>
       </Card>
 
@@ -131,11 +123,7 @@ export default async function StatusPage() {
         <CardContent className="space-y-2 text-sm">
           {!errors.length && <p className="text-muted-foreground">오류가 없습니다.</p>}
           {errors.length > 0 && (
-            <form action={retryErrors.bind(null, errors.map((e) => e.itemId))}>
-              <Button type="submit" variant="outline" size="sm">
-                전체 다시 시도
-              </Button>
-            </form>
+            <CommandButton action={retryErrors.bind(null, errors.map((e) => e.itemId))} label="전체 다시 시도" doneText="다시 시도했습니다. 아직 실패한 항목은 목록에 남습니다." />
           )}
           <ul className="divide-y">
             {errors.map((e) => (
@@ -147,11 +135,7 @@ export default async function StatusPage() {
                 <span className="text-xs text-muted-foreground">
                   재시도 {e.retryCount}회 · {e.nextRetryAt ? `다음 시도 ${untilTime(e.nextRetryAt)}` : "자동 재시도 끝"}
                 </span>
-                <form action={retryErrors.bind(null, [e.itemId])} className="ml-auto">
-                  <Button type="submit" variant="ghost" size="sm">
-                    재시도
-                  </Button>
-                </form>
+                <CommandButton action={retryErrors.bind(null, [e.itemId])} label="재시도" variant="ghost" doneText="다시 시도했습니다." className="ml-auto" />
                 <span className="w-full truncate text-xs text-muted-foreground">{shortPath(e.path)}</span>
               </li>
             ))}

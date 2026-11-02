@@ -3,7 +3,7 @@
 import { refresh } from "next/cache";
 import { getDb } from "@/server/db";
 import { acceptProjectSuggestion, acceptTagSuggestion, rejectSuggestion, removeManualTag } from "@/server/ai/pipeline";
-import { enqueue } from "@/server/sources/manage";
+import { enqueue, enqueueAndWait } from "@/server/sources/manage";
 import { setSetting } from "@/server/settings";
 
 export async function setAiEnabled(on: boolean) {
@@ -14,8 +14,7 @@ export async function setAiEnabled(on: boolean) {
 }
 
 export async function runAiNow() {
-  enqueue(getDb(), "ai_run_now");
-  refresh();
+  return enqueueAndWait(getDb(), "ai_run_now");
 }
 
 export async function acceptTags(id: number, selected: string[]) {
