@@ -7,7 +7,23 @@ import { useEffect, useRef, useState } from "react";
 import { Highlighted, SourceIcon, StateBadge } from "@/components/hub-ui";
 import { relTime, shortPath } from "@/lib/format";
 import type { SearchHit } from "@/server/search/query";
+import { readVisits, type Visit } from "@/lib/recent-visits";
 import { savedCategories } from "./category-filter";
+
+/** ⌘K 로 바로 갈 수 있는 화면 */
+const PAGES = [
+  { href: "/", label: "홈" },
+  { href: "/search", label: "검색" },
+  { href: "/recent", label: "최근 수정" },
+  { href: "/projects", label: "PARA · 프로젝트" },
+  { href: "/graph", label: "그래프" },
+  { href: "/chat", label: "AI 채팅" },
+  { href: "/ai-code", label: "AI 코드" },
+  { href: "/ai", label: "AI 정리" },
+  { href: "/duplicates", label: "중복 파일" },
+  { href: "/status", label: "동기화 상태" },
+  { href: "/settings", label: "설정" },
+];
 
 /** 검색 화면에서 고른 분류(기억해 둔 것)를 ⌘K 검색에도 쓴다 */
 const catQuery = () => (savedCategories() ?? []).map((c) => `&cat=${c}`).join("");
@@ -20,6 +36,8 @@ export function SearchPalette() {
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // 검색어가 없을 때 보여 줄 것: 이 브라우저에서 최근 연 항목, 최근 수정한 항목
+  const [recent, setRecent] = useState<SearchHit[]>([]);
   const router = useRouter();
   const seq = useRef(0);
 
@@ -34,6 +52,14 @@ export function SearchPalette() {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, []);
+
+  useEffect(() => {
+    if (!open) return;
+    fetch(`/api/search?recent=1&limit=6${catQuery()}`)
+      .then((r) => (r.headers.get("content-type")?.includes("json") ? r.json() : null))
+      .then((r: { hits: SearchHit[] } | null) => setRecent(r?.hits ?? []))
+      .catch(() => setRecent([]));
+  }, [open]);
 
   useEffect(() => {
     if (!q.trim()) return;
@@ -69,6 +95,21 @@ export function SearchPalette() {
     router.push(href);
   };
   const shown = q.trim() ? hits : [];
+  const typed = q.trim().toLowerCase();
+  const pages = typed ? PAGES.filter((p) => p.label.toLowerCase().includes(typed)) : PAGES;
+  // 창이 열려 있을 때만 읽는다 (작은 목록이라 렌더마다 읽어도 가볍다)
+  const visits: Visit[] = open ? readVisits() : [];
+  const visitIds = new Set(visits.map((v) => v.id));
+  const group = "px-2 pb-1 pt-2 text-xs font-medium text-muted-foreground [&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:pb-1";
+  const pageItems = (
+    <Command.Group heading="이동" className={group}>
+      {pages.map((p) => (
+        <Command.Item key={p.href} value={`page:${p.href}`} onSelect={() => go(p.href)} className="cursor-pointer rounded-md px-2 py-1.5 text-sm text-foreground data-[selected=true]:bg-muted">
+          {p.label}
+        </Command.Item>
+      ))}
+    </Command.Group>
+  );
 
   return (
     <>
@@ -100,8 +141,37 @@ export function SearchPalette() {
               {loading && <span className="text-xs text-muted-foreground">검색 중</span>}
             </div>
             <Command.List className="max-h-[60vh] overflow-y-auto p-1">
+              {!typed && visits.length > 0 && (
+                <Command.Group heading="최근 연 항목" className={group}>
+                  {visits.map((v) => (
+                    <Command.Item key={v.id} value={`visit:${v.id}`} onSelect={() => go(`/items/${v.id}`)} className="cursor-pointer rounded-md px-2 py-1.5 text-foreground data-[selected=true]:bg-muted">
+                      <div className="flex items-center gap-2">
+                        <SourceIcon kind={v.sourceKind} />
+                        <span className="truncate text-sm font-medium">{v.title}</span>
+                        <span className="ml-auto truncate text-xs font-normal text-muted-foreground">{shortPath(v.path)}</span>
+                      </div>
+                    </Command.Item>
+                  ))}
+                </Command.Group>
+              )}
+              {!typed && recent.some((h) => !visitIds.has(h.id)) && (
+                <Command.Group heading="최근 수정" className={group}>
+                  {recent
+                    .filter((h) => !visitIds.has(h.id))
+                    .map((h) => (
+                      <Command.Item key={h.id} value={`recent:${h.id}`} onSelect={() => go(`/items/${h.id}`)} className="cursor-pointer rounded-md px-2 py-1.5 text-foreground data-[selected=true]:bg-muted">
+                        <div className="flex items-center gap-2">
+                          <SourceIcon kind={h.sourceKind} />
+                          <span className="truncate text-sm font-medium">{h.title}</span>
+                          <span className="ml-auto shrink-0 text-xs font-normal text-muted-foreground">{relTime(h.modifiedAt)}</span>
+                        </div>
+                      </Command.Item>
+                    ))}
+                </Command.Group>
+              )}
+              {typed && pages.length > 0 && pageItems}
               {q.trim() && error && <p className="p-4 text-sm text-destructive">검색하지 못했습니다: {error}</p>}
-              {q.trim() && !loading && !error && !shown.length && <Command.Empty className="p-4 text-sm text-muted-foreground">결과가 없습니다.</Command.Empty>}
+              {q.trim() && !loading && !error && !shown.length && !pages.length && <Command.Empty className="p-4 text-sm text-muted-foreground">결과가 없습니다.</Command.Empty>}
               {shown.map((h) => (
                 <Command.Item
                   key={h.id}
@@ -132,6 +202,7 @@ export function SearchPalette() {
                   전체 결과 {total.toLocaleString()}건 보기 (필터 사용) →
                 </Command.Item>
               )}
+              {!typed && pageItems}
             </Command.List>
           </Command>
         </div>

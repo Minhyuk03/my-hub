@@ -28,6 +28,7 @@ import { LocalOpenButtons } from "./open-buttons";
 import { PolicyToggle } from "@/components/policy-toggle";
 import { explain, isDirectlyDenied, reasonLabel } from "@/server/chat/policy";
 import { AutoRefresh } from "@/app/status/auto-refresh";
+import { RememberVisit } from "@/components/remember-visit";
 
 const LANG: Record<string, string> = { ts: "typescript", tsx: "tsx", js: "javascript", jsx: "jsx", mjs: "javascript", cjs: "javascript", py: "python", rb: "ruby", rs: "rust", kt: "kotlin", sh: "bash", zsh: "bash", yml: "yaml", md: "markdown", h: "c", hpp: "cpp" };
 const MAX_PREVIEW = 200_000;
@@ -140,6 +141,7 @@ export default async function ItemPage({ params, searchParams }: PageProps<"/ite
 
   return (
     <div className="space-y-4">
+      <RememberVisit id={item.id} title={item.title} path={item.path} sourceKind={source.kind} />
       <div className="space-y-1">
         <div className="flex flex-wrap items-center gap-2">
           <SourceIcon kind={source.kind} className="size-5" />
