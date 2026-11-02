@@ -140,7 +140,9 @@ export default async function ProjectPage({ params, searchParams }: PageProps<"/
                 <div key={f.folderId} className="space-y-1 border-b pb-2 last:border-0">
                   <div className="flex items-center gap-2">
                     <SourceIcon kind={f.sourceKind} />
-                    <span className="truncate font-medium">{f.name}</span>
+                    <Link href={`/folders/${f.folderId}`} className="truncate font-medium hover:underline">
+                      {f.name}
+                    </Link>
                   </div>
                   <p className="break-all text-xs text-muted-foreground">{shortPath(f.path)}</p>
                   {f.warning && <p className="text-xs text-destructive">⚠ {f.warning}</p>}

@@ -1,4 +1,5 @@
 import { headers } from "next/headers";
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import fs from "node:fs";
 import path from "node:path";
@@ -148,7 +149,15 @@ export default async function ItemPage({ params, searchParams }: PageProps<"/ite
           <h1 className="break-all text-xl font-semibold">{item.title}</h1>
           <StateBadge state={item.state} sourceStatus={source.status} noContentReason={item.noContentReason} />
         </div>
-        <p className="break-all text-sm text-muted-foreground">{shortPath(item.path)}</p>
+        <p className="break-all text-sm text-muted-foreground">
+          {item.folderId ? (
+            <Link href={`/folders/${item.folderId}`} className="hover:text-foreground hover:underline" title="이 파일이 있는 폴더 보기">
+              {shortPath(item.path)}
+            </Link>
+          ) : (
+            shortPath(item.path)
+          )}
+        </p>
         <p className="text-xs text-muted-foreground">
           {SOURCE_KIND_LABEL[source.kind]} · {source.name} · {KIND_LABEL[item.kind] ?? item.kind} · {bytes(item.size)} · 수정 {fullDate(item.modifiedAt)}
         </p>
