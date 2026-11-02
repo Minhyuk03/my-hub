@@ -8,7 +8,7 @@ import { ThemeToggle } from "./theme-toggle";
 
 /** 상단 메뉴 (영문 대문자 표기, 한글 이름은 마우스를 올리면) */
 export const NAV = [
-  { href: "/hub", label: "Hub", title: "허브: 즐겨찾기·일정·최근 수정" },
+  { href: "/hub", label: "Hub", title: "허브: 파일 탐색" },
   { href: "/graph", label: "Graph", title: "그래프" },
   { href: "/projects", label: "PARA", title: "PARA · 프로젝트" },
   { href: "/chat", label: "AI Chat", title: "AI 채팅" },
