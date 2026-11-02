@@ -5,13 +5,39 @@ import Link from "next/link";
 import { useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { EMPTY_PROFILE, PROFILE_FIELDS, type Profile, type ProfileListKey } from "@/server/profile";
+import { EMPTY_PROFILE, imageSrc, PROFILE_FIELDS, PROFILE_LISTS, type FieldDef, type Profile, type ProfileListKey } from "@/server/profile";
 import { saveProfile } from "../actions";
 
 type Row = Record<string, string | number | boolean | null>;
-const SECTIONS: ProfileListKey[] = ["links", "education", "skills", "experience", "awards", "projects"];
 const inputCls = "h-8";
 const areaCls = "min-h-20 w-full rounded-md border bg-background px-3 py-2 text-sm";
+const IMAGE_HINT = "허브 파일 번호(예: 1234) · 허브 파일 주소(/items/1234) · https 주소";
+
+/** 칸 하나: 글 / 여러 줄 / 별점 / 이미지(미리보기) */
+function Field({ id, def, value, onChange }: { id: string; def: FieldDef; value: string; onChange: (v: string) => void }) {
+  if (def.type === "multiline") return <textarea id={id} className={areaCls} value={value} placeholder={def.placeholder} onChange={(e) => onChange(e.target.value)} />;
+  if (def.type === "stars")
+    return (
+      <select id={id} className="h-8 w-full rounded-md border bg-background px-2" value={value || "0"} onChange={(e) => onChange(e.target.value)}>
+        {[5, 4, 3, 2, 1, 0].map((n) => (
+          <option key={n} value={n}>
+            {n ? "★".repeat(n) + "☆".repeat(5 - n) : "표시 안 함"}
+          </option>
+        ))}
+      </select>
+    );
+  if (def.type === "image") {
+    const src = imageSrc(value);
+    return (
+      <div className="flex items-center gap-2">
+        <Input id={id} className={inputCls} value={value} placeholder={IMAGE_HINT} onChange={(e) => onChange(e.target.value)} />
+        {/* eslint-disable-next-line @next/next/no-img-element -- 허브 파일·외부 주소 미리보기 */}
+        {src && <img src={src} alt="" className="size-8 shrink-0 rounded object-cover" />}
+      </div>
+    );
+  }
+  return <Input id={id} className={inputCls} value={value} placeholder={def.placeholder} onChange={(e) => onChange(e.target.value)} />;
+}
 
 /** 자기소개 편집: 한 화면에서 고치고 "저장"을 누르면 한꺼번에 저장 */
 export function ProfileEditor({ initial, hubProjects }: { initial: Profile; hubProjects: { id: number; name: string }[] }) {
@@ -25,12 +51,12 @@ export function ProfileEditor({ initial, hubProjects }: { initial: Profile; hubP
     setDirty(true);
     setMsg(null);
   };
-  const setField = (k: "name" | "nameEn" | "headline" | "about", v: string) => update({ ...p, [k]: v });
+  const setField = (k: "name" | "nameEn" | "headline" | "about" | "photo" | "hero", v: string) => update({ ...p, [k]: v });
   const rows = (k: ProfileListKey) => p[k] as unknown as Row[];
   const setRows = (k: ProfileListKey, r: Row[]) => update({ ...p, [k]: r });
   const blankRow = (k: ProfileListKey): Row => {
     const r: Row = { public: false };
-    for (const f of PROFILE_FIELDS[k].fields) r[f.key] = "";
+    for (const f of PROFILE_FIELDS[k].fields) r[f.key] = f.type === "stars" ? "3" : "";
     if (k === "projects") r.projectId = null;
     return r;
   };
@@ -59,6 +85,14 @@ export function ProfileEditor({ initial, hubProjects }: { initial: Profile; hubP
             <Input id="pf-name-en" className={inputCls} value={p.nameEn} onChange={(e) => setField("nameEn", e.target.value)} />
           </label>
           <label className="space-y-1 text-sm sm:col-span-2">
+            <span className="text-muted-foreground">프로필 사진</span>
+            <Field id="pf-photo" def={{ key: "photo", label: "프로필 사진", type: "image" }} value={p.photo} onChange={(v) => setField("photo", v)} />
+          </label>
+          <label className="space-y-1 text-sm sm:col-span-2">
+            <span className="text-muted-foreground">맨 위 배경 사진</span>
+            <Field id="pf-hero" def={{ key: "hero", label: "배경 사진", type: "image" }} value={p.hero} onChange={(v) => setField("hero", v)} />
+          </label>
+          <label className="space-y-1 text-sm sm:col-span-2">
             <span className="text-muted-foreground">한 줄 소개</span>
             <Input id="pf-headline" className={inputCls} value={p.headline} placeholder="예: 임베디드와 온디바이스 AI를 공부하는 학생" onChange={(e) => setField("headline", e.target.value)} />
           </label>
@@ -70,7 +104,7 @@ export function ProfileEditor({ initial, hubProjects }: { initial: Profile; hubP
         <textarea id="pf-about" className={`${areaCls} min-h-32`} value={p.about} placeholder="3~5문장으로 나를 소개해 주세요." onChange={(e) => setField("about", e.target.value)} />
       </section>
 
-      {SECTIONS.map((k) => {
+      {PROFILE_LISTS.map((k) => {
         const def = PROFILE_FIELDS[k];
         const list = rows(k);
         return (
@@ -79,6 +113,7 @@ export function ProfileEditor({ initial, hubProjects }: { initial: Profile; hubP
               <h2 className="font-semibold">{def.title}</h2>
               <span className="text-xs text-muted-foreground">{list.length}개</span>
             </div>
+            <p className="-mt-2 text-xs text-muted-foreground">{def.hint}</p>
             {list.map((r, i) => {
               const set = (key: string, v: string | number | boolean | null) => setRows(k, list.map((x, j) => (j === i ? { ...x, [key]: v } : x)));
               const move = (d: -1 | 1) => {
@@ -90,13 +125,9 @@ export function ProfileEditor({ initial, hubProjects }: { initial: Profile; hubP
                 <div key={i} className="space-y-2 rounded-lg border p-3">
                   <div className="grid gap-2 sm:grid-cols-2">
                     {def.fields.map((f) => (
-                      <label key={f.key} className={`space-y-1 text-sm ${f.multiline ? "sm:col-span-2" : ""}`}>
+                      <label key={f.key} className={`space-y-1 text-sm ${f.type === "multiline" || f.type === "image" ? "sm:col-span-2" : ""}`}>
                         <span className="text-xs text-muted-foreground">{f.label}</span>
-                        {f.multiline ? (
-                          <textarea id={`pf-${k}-${i}-${f.key}`} className={areaCls} value={String(r[f.key] ?? "")} placeholder={f.placeholder} onChange={(e) => set(f.key, e.target.value)} />
-                        ) : (
-                          <Input id={`pf-${k}-${i}-${f.key}`} className={inputCls} value={String(r[f.key] ?? "")} placeholder={f.placeholder} onChange={(e) => set(f.key, e.target.value)} />
-                        )}
+                        <Field id={`pf-${k}-${i}-${f.key}`} def={f} value={String(r[f.key] ?? "")} onChange={(v) => set(f.key, v)} />
                       </label>
                     ))}
                     {k === "projects" && (

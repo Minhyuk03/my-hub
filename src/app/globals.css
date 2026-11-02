@@ -167,3 +167,7 @@
     border-color 500ms ease-in-out,
     fill 500ms ease-in-out !important;
 }
+
+/* 첫 화면(자기소개) 강조색: 따뜻한 회갈색 */
+.portfolio { --taupe: #7a6a5d; --footer: #3f3d3b; }
+.dark .portfolio { --taupe: #c4b1a1; --footer: #1c1b1a; }

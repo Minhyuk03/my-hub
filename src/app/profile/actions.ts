@@ -20,7 +20,7 @@ export async function addHubProject(projectId: number) {
   if (!pr) return;
   const p = normalizeProfile(getSettings(db).profile);
   if (p.projects.some((x) => x.projectId === projectId)) return;
-  p.projects.push({ title: pr.name, period: "", role: "", summary: "", tech: "", projectId, url: "", public: false });
+  p.projects.push({ title: pr.name, period: "", contribution: "", role: "", result: "", tech: "", summary: "", cover: "", url: "", projectId, public: false });
   setSetting(db, "profile", p);
   refresh();
 }
