@@ -6,7 +6,7 @@ import { externalHistory, sendExternal, PolicyError } from "@/server/chat/gatewa
 import { makeLlms } from "@/server/chat/llm";
 import { deniedItems, explain, setFolderDeny, setItemDeny, setProjectDeny, setSourceDeny } from "@/server/chat/policy";
 import { citedNumbers, formatDocuments, neutralize, SYSTEM_PROMPT } from "@/server/chat/prompt";
-import { ask } from "@/server/chat/service";
+import { ask, STOPPED } from "@/server/chat/service";
 import { keywordQuery } from "@/server/chat/retrieve";
 import { chatCitations, chatMessages, externalLog, folders, items } from "@/server/db/schema";
 import { createProject, linkFolder, setItemRule } from "@/server/projects";
@@ -235,5 +235,42 @@ describe("AI 채팅 (Phase 5)", () => {
     const all = JSON.stringify([msg, db.select().from(externalLog).all()]);
     expect(all).not.toMatch(KEY);
     expect(all).not.toMatch("TESTKEY");
+  });
+});
+
+describe("채팅 중지", () => {
+  /** 글자를 조금 보낸 뒤 사용자가 중지한 것처럼 끊는 로컬 AI */
+  function stoppingAi(partial: string) {
+    const ctrl = new AbortController();
+    const { llms } = fakeAi();
+    llms.local.chat = async (_m, _s, _msgs, opts) => {
+      if (partial) opts?.onDelta?.(partial);
+      ctrl.abort();
+      throw new DOMException("This operation was aborted", "AbortError");
+    };
+    return { llms, signal: ctrl.signal };
+  }
+
+  it("받은 데까지는 답으로 저장하고 다음 질문의 이력에도 쓴다", async () => {
+    const { db } = await setup();
+    const { llms, signal } = stoppingAi("마감은 금요일");
+    const r = await ask(db, { ai: null, llms }, { scope: { kind: "all" }, question: "프로젝트 알파 마감", provider: "local" }, () => {}, signal);
+    const msg = db.select().from(chatMessages).where(eq(chatMessages.id, r.messageId)).get()!;
+    expect(msg.error).toBeNull();
+    expect(msg.content).toBe(`마감은 금요일\n\n${STOPPED}`);
+    expect(db.select().from(chatCitations).where(eq(chatCitations.messageId, r.messageId)).all().length).toBeGreaterThan(0);
+
+    const ai = fakeAi();
+    await ask(db, { ai: null, llms: ai.llms }, { threadId: r.threadId, scope: { kind: "all" }, question: "프로젝트 알파 담당은?", provider: "local" });
+    expect(ai.sent[0].body).toMatch("마감은 금요일");
+  });
+
+  it("아무것도 못 받았으면 오류 대신 중지 안내만 남긴다", async () => {
+    const { db } = await setup();
+    const { llms, signal } = stoppingAi("");
+    const r = await ask(db, { ai: null, llms }, { scope: { kind: "all" }, question: "프로젝트 알파 마감", provider: "local" }, () => {}, signal);
+    const msg = db.select().from(chatMessages).where(eq(chatMessages.id, r.messageId)).get()!;
+    expect(msg.content).toBe("");
+    expect(msg.error).toBe("답을 받기 전에 중지했습니다.");
   });
 });

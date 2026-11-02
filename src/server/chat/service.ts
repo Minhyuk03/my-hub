@@ -16,6 +16,9 @@ import { deniedItems } from "./policy";
 import { citedNumbers, INSUFFICIENT, SYSTEM_PROMPT, userTurn } from "./prompt";
 import { retrieve, type Strategy } from "./retrieve";
 
+/** 중지한 답 끝에 붙는 표시 */
+export const STOPPED = "_(중지함)_";
+
 export type QuickAction = "summary" | "status" | "todo";
 export const QUICK_ACTIONS: Record<QuickAction, { label: string; question: string }> = {
   summary: { label: "요약", question: "이 자료들의 핵심 내용을 요약해 주세요." },
@@ -68,7 +71,18 @@ export async function ask(db: Db, deps: ChatDeps, input: AskInput, emit: (e: Ask
   const scope = db.select().from(chatThreads).where(eq(chatThreads.id, threadId)).get()!.scope;
   db.insert(chatMessages).values({ threadId, role: "user", content: question, createdAt: now() }).run();
   const msgId = db.insert(chatMessages).values({ threadId, role: "assistant", content: "", provider, model, createdAt: now() }).returning({ id: chatMessages.id }).get().id;
+  /** 사용자가 중지: 받은 데까지는 답으로 저장하고 (이후 대화 이력에도 쓰임), 아무것도 못 받았으면 안내만 */
+  const stopped = () => {
+    if (text.trim()) {
+      finish({ content: `${text.trimEnd()}\n\n${STOPPED}` });
+      saveCitations(db, msgId, used, text);
+    } else finish({ error: "답을 받기 전에 중지했습니다." });
+    return { threadId, messageId: msgId };
+  };
   const finish = (patch: Partial<typeof chatMessages.$inferInsert>) => db.update(chatMessages).set(patch).where(eq(chatMessages.id, msgId)).run();
+  // 중지했을 때 받은 데까지 남기려고 try 밖에 둔다
+  let text = "";
+  let used: GatewayContext[] = [];
 
   try {
     if (provider === "local") markChatActive(db, now());
@@ -89,6 +103,7 @@ export async function ask(db: Db, deps: ChatDeps, input: AskInput, emit: (e: Ask
     const history = localHistory(db, threadId, msgId);
     const localOnly = !external && (contexts.some((c) => denied.has(c.itemId)) || history.tainted);
     finish({ localOnly, excludedCount: excluded });
+    used = contexts;
     emit({ type: "start", threadId, messageId: msgId, contexts: contexts.map(({ n, itemId, title, path }) => ({ n, itemId, title, path })), excluded, localOnly });
 
     if (!r.strong || !contexts.length) {
@@ -103,7 +118,6 @@ export async function ask(db: Db, deps: ChatDeps, input: AskInput, emit: (e: Ask
       return { threadId, messageId: msgId };
     }
 
-    let text = "";
     const onDelta = (t: string) => {
       text += t;
       emit({ type: "delta", text: t });
@@ -113,6 +127,7 @@ export async function ask(db: Db, deps: ChatDeps, input: AskInput, emit: (e: Ask
     } else {
       await deps.llms.local.chat(model, SYSTEM_PROMPT, [...history.messages, { role: "user", content: userTurn(contexts, question) }], { onDelta, signal });
     }
+    if (signal?.aborted) return stopped();
     const cited = citedNumbers(text, contexts.length);
     const insufficient = text.trim().startsWith(INSUFFICIENT.replace(/\.$/, ""));
     finish({ content: text, insufficient });
@@ -120,6 +135,7 @@ export async function ask(db: Db, deps: ChatDeps, input: AskInput, emit: (e: Ask
     emit({ type: "done", messageId: msgId, insufficient, cited: [...cited] });
     return { threadId, messageId: msgId };
   } catch (e) {
+    if (signal?.aborted) return stopped();
     const message = e instanceof PolicyError || e instanceof LlmError ? e.message : `오류: ${(e as Error).message}`;
     finish({ error: message });
     emit({ type: "error", message, messageId: msgId });
