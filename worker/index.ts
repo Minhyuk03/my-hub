@@ -6,6 +6,7 @@
  * - 웹에서 넣은 명령(commands 테이블) 처리
  */
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { and, eq, gte, isNull, sql } from "drizzle-orm";
 import { applyRetention, createBackup, flushPending, listBackups, PENDING_DIR, realBackupEnv } from "@/server/backup";
@@ -18,6 +19,8 @@ import { refreshSuggestions } from "@/server/projects/suggest";
 import { seedDefaultSources } from "@/server/sources/manage";
 import { isExcludedFolder, isExcludedName, isInside, skippedBySource } from "@/server/sources/rules";
 import { processFile, purgeExcluded, realDeps, reindexItems, retryDue, runScan } from "@/server/sync/scanner";
+import { ScanBackoff } from "@/server/sync/backoff";
+import { trimLog } from "@/server/logs";
 import { DriveClient, driveEnv } from "@/server/connectors/gdrive/client";
 import { runDriveChanges, runDriveScan } from "@/server/connectors/gdrive/sync";
 import { keychainStore } from "@/server/connectors/gdrive/tokens";
@@ -44,6 +47,8 @@ const log = (...a: unknown[]) => console.log(new Date().toLocaleString("ko-KR"),
 /** Google Drive: 변경 목록 확인 간격 */
 const DRIVE_CHANGES_MS = 5 * 60_000;
 const lastDriveChanges = new Map<number, number>();
+/** 클라우드 소스 전체 스캔이 계속 실패하면(토큰 만료 등) 다시 시도 간격을 늘린다 */
+const cloudBackoff = new ScanBackoff();
 let driveClient: DriveClient | null = null;
 function drive() {
   if (!driveClient) driveClient = new DriveClient({ fetch, tokens: keychainStore, ...driveEnv() });
@@ -103,6 +108,7 @@ async function runQueue() {
     const full = current.kind !== "changes";
     if (full) log("스캔 시작", src.name, "(Figma 전체)");
     const r = await runFigmaScan(db, src.id, { client: figma(), now: Date.now, shouldAbort: () => stopping }, full);
+    if (full) cloudBackoff.record(src.id, r.result, Date.now());
     if (full || r.result !== "ok") log(full ? "스캔 종료" : "Figma 변경 확인", src.name, r.result, r.message ?? "", r.deleted ? `삭제 ${r.deleted}` : "");
     if (full && r.result === "ok") updateSuggestions();
   } else if (src?.enabled && isGitHub(src) && current.kind === "changes") {
@@ -111,6 +117,7 @@ async function runQueue() {
   } else if (src?.enabled && isGitHub(src)) {
     log("스캔 시작", src.name, "(GitHub 전체)");
     const r = await runGitHubScan(db, src.id, { client: github(), now: Date.now, shouldAbort: () => stopping });
+    cloudBackoff.record(src.id, r.result, Date.now());
     log("스캔 종료", src.name, r.result, r.message ?? "", r.deleted ? `삭제 ${r.deleted}` : "");
     if (r.result === "ok") updateSuggestions();
   } else if (src?.enabled && isNotion(src) && current.kind === "changes") {
@@ -119,6 +126,7 @@ async function runQueue() {
   } else if (src?.enabled && isNotion(src)) {
     log("스캔 시작", src.name, "(Notion 전체)");
     const r = await runNotionScan(db, src.id, { client: notion(), now: Date.now, shouldAbort: () => stopping });
+    cloudBackoff.record(src.id, r.result, Date.now());
     log("스캔 종료", src.name, r.result, r.message ?? "", r.deleted ? `삭제 ${r.deleted}` : "");
     if (r.result === "ok") updateSuggestions();
   } else if (src?.enabled && isDrive(src) && current.kind === "changes") {
@@ -127,6 +135,7 @@ async function runQueue() {
   } else if (src?.enabled && isDrive(src)) {
     log("스캔 시작", src.name, "(Google Drive 전체)");
     const r = await runDriveScan(db, src.id, { client: drive(), now: Date.now, shouldAbort: () => stopping });
+    cloudBackoff.record(src.id, r.result, Date.now());
     log("스캔 종료", src.name, r.result, r.message ?? "", r.deleted ? `삭제 ${r.deleted}` : "");
     if (r.result === "ok") updateSuggestions();
   } else if (src?.enabled) {
@@ -226,7 +235,9 @@ async function checkSources() {
     if (isCloud(src)) {
       // Google Drive·Notion: 파일 감시 대신 변경 목록을 주기적으로 확인한다. 연결 상태는 API 호출 결과로 정해진다.
       const due = !src.lastFullScanAt || Date.now() - src.lastFullScanAt > settings.fullScanIntervalHours * 3600_000;
-      if (due && src.status !== "syncing") enqueueScan({ sourceId: src.id });
+      if (due && src.status !== "syncing") {
+        if (!cloudBackoff.waiting(src.id, Date.now())) enqueueScan({ sourceId: src.id });
+      }
       else if (Date.now() - (lastDriveChanges.get(src.id) ?? 0) > (isNotion(src) ? NOTION_CHANGES_MS : isGitHub(src) ? GITHUB_CHANGES_MS : isFigma(src) ? FIGMA_CHANGES_MS : DRIVE_CHANGES_MS)) {
         lastDriveChanges.set(src.id, Date.now());
         enqueueScan({ sourceId: src.id, kind: "changes" });
@@ -267,10 +278,12 @@ async function handleCommands() {
       switch (c.kind) {
         case "drive_connected":
           driveClient = null; // 새 토큰으로 다시 만든다
+          cloudBackoff.reset();
           for (const s of db.select().from(sources).where(eq(sources.kind, "gdrive")).all()) enqueueScan({ sourceId: s.id });
           break;
         case "rescan":
         case "source_added":
+          cloudBackoff.reset(sourceId);
           online.delete(sourceId); // 다음 확인 때 감시 시작 + 전체 스캔
           await checkSources();
           if (c.kind === "rescan") enqueueScan({ sourceId });
@@ -456,6 +469,18 @@ for (const j of db.select().from(scanJobs).where(eq(scanJobs.result, "aborted"))
   if (src) enqueueScan({ sourceId: j.sourceId, scope: j.scopePath === src.rootPath ? undefined : j.scopePath });
 }
 log("시작", `pid ${process.pid}`);
+
+/** launchd 로그(web.log, worker.log)가 한없이 커지지 않게 */
+function trimLogs() {
+  const dir = path.join(os.homedir(), "Library/Logs/my-hub");
+  for (const name of ["web.log", "worker.log"]) {
+    try {
+      if (trimLog(path.join(dir, name))) log("로그 정리", name, "(끝부분은 .1 에 보관)");
+    } catch (e) {
+      log("로그 정리 실패", name, (e as Error).message);
+    }
+  }
+}
 {
   const n = purgeExcluded(db);
   if (n) log("제외 규칙 적용: 색인에서 뺀 항목", n);
@@ -481,7 +506,9 @@ const timers = [
   setTimeout(() => void calendarTick().catch((e) => log("캘린더 오류", e)), 5000),
   setTimeout(updateCategories, 3000),
   setInterval(updateCategories, 5 * 60_000),
+  setInterval(trimLogs, 10 * 60_000),
 ];
+trimLogs();
 void recordEnv();
 void checkSources();
 heartbeat();
