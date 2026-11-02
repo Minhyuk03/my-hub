@@ -12,7 +12,8 @@ import { savedCategories } from "./category-filter";
 
 /** ⌘K 로 바로 갈 수 있는 화면 */
 const PAGES = [
-  { href: "/", label: "홈" },
+  { href: "/", label: "자기소개 · 포트폴리오" },
+  { href: "/hub", label: "허브 (즐겨찾기 · 일정 · 최근)" },
   { href: "/search", label: "검색" },
   { href: "/recent", label: "최근 수정" },
   { href: "/projects", label: "PARA · 프로젝트" },

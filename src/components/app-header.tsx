@@ -6,6 +6,7 @@ import { NavButtons } from "./nav-buttons";
 import { NavLinks } from "./nav-links";
 
 const NAV = [
+  { href: "/hub", label: "허브" },
   { href: "/graph", label: "그래프" },
   { href: "/projects", label: "PARA" },
   { href: "/chat", label: "AI 채팅" },

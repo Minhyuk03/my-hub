@@ -78,7 +78,7 @@ export default async function HomeEditPage({ searchParams }: PageProps<"/home/ed
     <div className="space-y-4">
       <div className="flex items-center gap-2">
         <h1 className="text-xl font-semibold">홈 꾸미기</h1>
-        <Link href="/" className="ml-auto text-sm underline">
+        <Link href="/hub" className="ml-auto text-sm underline">
           홈으로 →
         </Link>
       </div>

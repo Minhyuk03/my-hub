@@ -3,6 +3,7 @@ import { DEFAULT_EXCLUDED_FOLDERS, DEFAULT_EXCLUDED_PATTERNS, PATHS } from "@/li
 import { DEFAULT_SYNONYMS } from "./projects/synonyms";
 import { normalizeUserPath } from "./sources/rules";
 import type { Db } from "./db";
+import { EMPTY_PROFILE, type Profile } from "./profile";
 import { settings } from "./db/schema";
 
 export const DEFAULT_SETTINGS = {
@@ -30,6 +31,8 @@ export const DEFAULT_SETTINGS = {
   passcodeHash: "" as string,
   /** 홈 배경 이미지 파일 이름 (앱 데이터 폴더 안). 비어 있으면 기본 배경 */
   homeBackground: "" as string,
+  /** 첫 화면 자기소개·포트폴리오 (src/server/profile.ts) */
+  profile: EMPTY_PROFILE as Profile,
   /** 홈 가운데 큰 제목 */
   homeTitle: "나의 허브" as string,
   /** 연결된 Google 계정 (토큰은 키체인에, 여기에는 표시용 정보만) */
