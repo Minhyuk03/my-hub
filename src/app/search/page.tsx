@@ -52,9 +52,13 @@ export default async function SearchPage({ searchParams }: PageProps<"/search">)
   };
 
   return (
-    <div className="grid gap-6 md:grid-cols-[220px_1fr]">
-      <form className="space-y-4 text-sm" action="/search">
-        <Input name="q" defaultValue={q} placeholder="검색어" className="md:hidden" />
+    // 검색어와 필터를 한 양식으로: 검색어만 고쳐도 필터·검색 방식이 그대로 유지된다
+    <form action="/search" className="grid gap-x-6 gap-y-3 md:grid-cols-[220px_1fr]">
+      <div className="md:col-start-2 md:row-start-1">
+        <Input name="q" defaultValue={q} placeholder="검색어를 입력하세요" />
+        <input type="hidden" name="mode" value={mode} />
+      </div>
+      <div className="space-y-4 text-sm md:col-start-1 md:row-span-2 md:row-start-1">
         <fieldset className="space-y-1">
           <legend className="mb-1 font-medium">소스</legend>
           {srcs.map((s) => (
@@ -105,13 +109,9 @@ export default async function SearchPage({ searchParams }: PageProps<"/search">)
         <Button type="submit" size="sm" className="w-full">
           필터 적용
         </Button>
-      </form>
+      </div>
 
-      <div>
-        <form action="/search" className="mb-2 hidden md:block">
-          <Input name="q" defaultValue={q} placeholder="검색어를 입력하세요" />
-          <input type="hidden" name="mode" value={mode} />
-        </form>
+      <div className="min-w-0 md:col-start-2 md:row-start-2">
         <div className="mb-3 flex flex-wrap items-center gap-1 text-xs">
           {(
             [
@@ -170,6 +170,6 @@ export default async function SearchPage({ searchParams }: PageProps<"/search">)
           </>
         )}
       </div>
-    </div>
+    </form>
   );
 }
