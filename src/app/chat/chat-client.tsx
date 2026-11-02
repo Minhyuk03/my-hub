@@ -226,7 +226,7 @@ export function ChatClient({
           <span className="rounded bg-muted px-2 py-0.5">{scopeLabel.label}</span>
         ) : (
           <select
-            className="h-8 rounded-md border bg-background px-2"
+            className="h-8 max-w-full min-w-0 rounded-md border bg-background px-2"
             value={scope.kind === "project" ? `p${scope.projectId}` : scope.kind}
             onChange={(e) => {
               const v = e.target.value;

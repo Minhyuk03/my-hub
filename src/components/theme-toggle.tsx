@@ -29,7 +29,7 @@ export function ThemeToggle() {
     window.setTimeout(() => root.classList.remove("theme-transition"), DURATION);
   };
   return (
-    <Button variant="ghost" size="icon" onClick={toggle} aria-label="화면 테마 전환">
+    <Button variant="ghost" size="icon" onClick={toggle} aria-label="화면 테마 전환" className="size-8 text-current opacity-70 hover:bg-current/10 hover:text-current hover:opacity-100">
       <Sun className="size-4 dark:hidden" />
       <Moon className="hidden size-4 dark:block" />
     </Button>

@@ -1,5 +1,4 @@
 import { Pencil, Plus } from "lucide-react";
-import { Poppins } from "next/font/google";
 import Link from "next/link";
 import { connection } from "next/server";
 import { CoverImage } from "@/components/cover-image";
@@ -11,9 +10,11 @@ import { membershipSql, projectItemList } from "@/server/projects";
 import { getSettings } from "@/server/settings";
 import { addHubProject } from "./profile/actions";
 
-// 아임웹 MULTIPLY 테마 느낌: 배경 사진 위 큰 가는 글씨 → About → Profile → Project 사진 격자 → 짙은 회색 연락처 띠.
-// 한글은 Poppins 에 없어 시스템 글꼴로 이어진다. 색은 globals.css 의 .portfolio (--taupe, --footer).
-const poppins = Poppins({ subsets: ["latin"], weight: ["300", "400", "500"], display: "swap" });
+// 아임웹 MULTIPLY 테마 느낌: 화면 끝까지 닿는 배경 사진 위 큰 가는 글씨(맨 위 메뉴 줄이 투명하게 겹침)
+// → About → Profile → Project 사진 격자 → 짙은 회색 연락처 띠. 글꼴·색은 layout.tsx·globals.css 공통 (--taupe, --footer).
+
+/** 본문 폭을 벗어나 화면 끝까지 닿게 (body 가 overflow-x: clip) */
+const bleed = "relative left-1/2 w-screen -translate-x-1/2";
 
 /** 넓은 자간의 작은 대문자 라벨 */
 const label = "text-[11px] font-medium uppercase tracking-[0.25em]";
@@ -126,49 +127,47 @@ export default async function ProfilePage({ searchParams }: PageProps<"/">) {
   const hero = imageSrc(p.hero);
   const photo = imageSrc(p.photo);
   const aboutSecond = works.find((w) => w.cover)?.cover ?? "";
-  const brand = (p.nameEn || p.name || "PORTFOLIO").toUpperCase();
+  const brand = (p.nameEn || p.name || "My Hub").toUpperCase();
   const skills = [...p.skills].sort((a, b) => stars(b.level) - stars(a.level));
   const blank = !p.name && !p.headline && !p.about && !p.projects.length;
 
   return (
-    <div className={`portfolio ${poppins.className} -mx-4 -mt-6 -mb-6 font-light sm:mx-0`}>
-      {/* 배경 사진 + 이름 */}
-      <section className="relative isolate flex min-h-[34rem] flex-col overflow-hidden bg-neutral-500 text-white">
+    <div className="-mt-6 -mb-6 font-light">
+      {/* 배경 사진 + 이름 (맨 위 메뉴 줄이 이 위에 투명하게 겹친다) */}
+      <section className={`${bleed} isolate bg-neutral-500 text-white`}>
         {hero ? (
           <CoverImage src={hero} className="absolute inset-0 -z-20 size-full" />
         ) : (
           <div className="absolute inset-0 -z-20 bg-gradient-to-br from-stone-500 via-stone-600 to-stone-800" />
         )}
         <div className="absolute inset-0 -z-10 bg-black/35" />
-        <nav className="flex flex-wrap items-center gap-x-8 gap-y-2 px-6 py-6 sm:px-10">
-          <span className="text-lg font-normal tracking-[0.3em]">{brand}</span>
-          <div className={`${label} ml-auto flex flex-wrap gap-x-6 gap-y-2 font-normal text-white/85`}>
-            <a href="#about" className="hover:text-white">
-              About
-            </a>
-            <a href="#profile" className="hover:text-white">
-              Profile
-            </a>
-            <a href="#project" className="hover:text-white">
-              Project
-            </a>
-            <a href="#contact" className="hover:text-white">
-              Contact
-            </a>
-            <Link href="/profile/edit" className="inline-flex items-center gap-1 hover:text-white">
-              <Pencil className="size-3" /> 편집
-            </Link>
-          </div>
-        </nav>
-        <div className="grid flex-1 items-center gap-10 px-6 pb-12 sm:px-10 md:grid-cols-[1fr_22rem]">
+        <div className="mx-auto grid min-h-[38rem] max-w-6xl items-center gap-10 px-4 pt-36 pb-14 md:grid-cols-[1fr_22rem]">
           <div className="space-y-5">
             <h1 className="text-4xl leading-tight font-light text-balance sm:text-5xl">{p.name || "이름을 적어 주세요"}</h1>
             <p className="max-w-[40ch] text-base leading-relaxed text-white/90">{p.headline || "한 줄 소개를 적어 주세요"}</p>
-            {!hero && (
-              <Link href="/profile/edit#basics" className="inline-block text-xs text-white/70 underline-offset-4 hover:underline">
-                배경 사진 넣기
+            {/* 이 화면 안 바로가기 */}
+            <div className={`${label} flex flex-wrap gap-x-6 gap-y-2 pt-6 font-normal text-white/75`}>
+              <a href="#about" className="hover:text-white">
+                About
+              </a>
+              <a href="#profile" className="hover:text-white">
+                Profile
+              </a>
+              <a href="#project" className="hover:text-white">
+                Project
+              </a>
+              <a href="#contact" className="hover:text-white">
+                Contact
+              </a>
+              <Link href="/profile/edit" className="inline-flex items-center gap-1 normal-case tracking-normal hover:text-white">
+                <Pencil className="size-3" /> 편집
               </Link>
-            )}
+              {!hero && (
+                <Link href="/profile/edit#basics" className="normal-case tracking-normal hover:text-white">
+                  배경 사진 넣기
+                </Link>
+              )}
+            </div>
           </div>
           {/* 오른쪽에 겹쳐 놓인 사진 (테마의 슬라이드 자리) */}
           <div className="hidden md:block md:translate-y-16">
@@ -177,7 +176,7 @@ export default async function ProfilePage({ searchParams }: PageProps<"/">) {
         </div>
       </section>
 
-      <div className="space-y-20 px-6 pt-16 pb-24 sm:px-10 md:space-y-28 md:pt-28">
+      <div className="space-y-20 pt-16 pb-24 md:space-y-28 md:pt-28">
         {blank && (
           <p className="-mt-8 text-center text-sm text-muted-foreground md:-mt-16">
             아직 비어 있습니다.{" "}
@@ -383,8 +382,8 @@ export default async function ProfilePage({ searchParams }: PageProps<"/">) {
       </div>
 
       {/* Contact: 짙은 회색 띠 */}
-      <footer id="contact" className="scroll-mt-20 bg-[var(--footer)] px-6 py-14 text-sm text-white/70 sm:px-10">
-        <div className="flex flex-wrap gap-x-16 gap-y-8">
+      <footer id="contact" className={`${bleed} scroll-mt-20 bg-[var(--footer)] text-sm text-white/70`}>
+        <div className="mx-auto flex max-w-6xl flex-wrap gap-x-16 gap-y-8 px-4 py-14">
           <div className="space-y-3">
             <p className="text-xl font-normal tracking-[0.3em] text-white">{brand}</p>
             {p.links.length ? (

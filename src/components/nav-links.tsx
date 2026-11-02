@@ -3,19 +3,20 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
-/** 상단 글자 메뉴: 지금 있는 페이지는 글자를 밝게 + 아래 짧은 선으로 표시 */
-export function NavLinks({ items }: { items: { href: string; label: string }[] }) {
+/** 상단 글자 메뉴: 작은 대문자·넓은 자간. 지금 있는 페이지는 진하게 + 밑줄. 글자색은 메뉴 줄에서 물려받는다 */
+export function NavLinks({ items }: { items: { href: string; label: string; title?: string }[] }) {
   const pathname = usePathname();
   return (
-    <nav className="flex gap-3 text-sm text-muted-foreground">
+    <nav className="flex gap-6 overflow-x-auto text-[11px] font-normal uppercase tracking-[0.25em] whitespace-nowrap">
       {items.map((n) => {
         const active = pathname === n.href || pathname.startsWith(n.href + "/");
         return (
           <Link
             key={n.href}
             href={n.href}
+            title={n.title}
             aria-current={active ? "page" : undefined}
-            className={`relative py-1 transition-colors hover:text-foreground ${active ? "text-foreground after:absolute after:inset-x-0 after:-bottom-0.5 after:h-0.5 after:rounded-full after:bg-foreground" : ""}`}
+            className={`relative py-1 transition-opacity ${active ? "opacity-100 after:absolute after:inset-x-0 after:-bottom-0.5 after:h-px after:bg-current" : "opacity-65 hover:opacity-100"}`}
           >
             {n.label}
           </Link>

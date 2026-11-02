@@ -7,7 +7,8 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Pretendard", "Noto Sans KR", system-ui, sans-serif;
+  /* 영문은 Poppins (layout.tsx 의 next/font), 한글은 시스템 글꼴로 */
+  --font-sans: var(--font-poppins), -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Pretendard", "Noto Sans KR", system-ui, sans-serif;
   --font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
   --font-heading: var(--font-sans);
   --color-sidebar-ring: var(--sidebar-ring);
@@ -55,24 +56,27 @@
   --card-foreground: oklch(0.145 0 0);
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
+  --primary: oklch(0.52 0.03 60);
   --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
+  --secondary: oklch(0.965 0.004 75);
   --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
+  --muted: oklch(0.965 0.004 75);
+  --muted-foreground: oklch(0.54 0.01 60);
+  --accent: oklch(0.955 0.006 75);
   --accent-foreground: oklch(0.205 0 0);
   --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
+  --border: oklch(0.915 0.006 75);
+  --input: oklch(0.915 0.006 75);
+  --ring: oklch(0.65 0.03 60);
   --chart-1: oklch(0.87 0 0);
   --chart-2: oklch(0.556 0 0);
   --chart-3: oklch(0.439 0 0);
   --chart-4: oklch(0.371 0 0);
   --chart-5: oklch(0.269 0 0);
-  --radius: 0.625rem;
+  --radius: 0.25rem;
+  /* 포트폴리오 디자인: 회갈색 강조, 짙은 회색 아래 띠 */
+  --taupe: var(--primary);
+  --footer: #3f3d3b;
   --sidebar: oklch(0.985 0 0);
   --sidebar-foreground: oklch(0.145 0 0);
   --sidebar-primary: oklch(0.205 0 0);
@@ -84,24 +88,25 @@
 }
 
 .dark {
-  --background: oklch(0.145 0 0);
+  --background: oklch(0.155 0.004 60);
+  --footer: #1c1b1a;
   --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
+  --card: oklch(0.2 0.005 60);
   --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
+  --popover: oklch(0.2 0.005 60);
   --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
+  --primary: oklch(0.78 0.035 65);
+  --primary-foreground: oklch(0.2 0.01 60);
+  --secondary: oklch(0.26 0.006 60);
   --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
+  --muted: oklch(0.26 0.006 60);
+  --muted-foreground: oklch(0.7 0.012 65);
+  --accent: oklch(0.28 0.008 60);
   --accent-foreground: oklch(0.985 0 0);
   --destructive: oklch(0.704 0.191 22.216);
   --border: oklch(1 0 0 / 10%);
   --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
+  --ring: oklch(0.6 0.03 60);
   --chart-1: oklch(0.87 0 0);
   --chart-2: oklch(0.556 0 0);
   --chart-3: oklch(0.439 0 0);
@@ -123,6 +128,8 @@
   }
   body {
     @apply bg-background text-foreground;
+    /* 화면 끝까지 닿는 첫 화면 사진·아래 띠(w-screen)가 가로 스크롤을 만들지 않게 */
+    overflow-x: clip;
   }
   html {
     @apply font-sans;
@@ -167,7 +174,3 @@
     border-color 500ms ease-in-out,
     fill 500ms ease-in-out !important;
 }
-
-/* 첫 화면(자기소개) 강조색: 따뜻한 회갈색 */
-.portfolio { --taupe: #7a6a5d; --footer: #3f3d3b; }
-.dark .portfolio { --taupe: #c4b1a1; --footer: #1c1b1a; }

@@ -1,7 +1,15 @@
 import type { Metadata, Viewport } from "next";
 import { headers } from "next/headers";
+import { Poppins } from "next/font/google";
 import "./globals.css";
-import { AppHeader } from "@/components/app-header";
+import { AppHeader, NAV } from "@/components/app-header";
+import { PageLabel, SiteFooter } from "@/components/site-chrome";
+import { getDb } from "@/server/db";
+import { normalizeProfile } from "@/server/profile";
+import { getSettings } from "@/server/settings";
+
+// 영문 글꼴 (한글은 globals.css 의 --font-sans 에서 시스템 글꼴로 이어짐). 빌드 때 받아 허브가 직접 제공한다
+const poppins = Poppins({ subsets: ["latin"], weight: ["300", "400", "500", "600"], display: "swap", variable: "--font-poppins" });
 
 export const metadata: Metadata = {
   title: "나의 허브",
@@ -30,15 +38,22 @@ const themeScript = `(function(){try{var h=document.documentElement;var want=fun
 export default async function RootLayout({ children }: LayoutProps<"/">) {
   // CSP 가 허용하는 이번 요청의 nonce (src/proxy.ts)
   const nonce = (await headers()).get("x-nonce") ?? undefined;
+  // 로고: 자기소개의 영문 이름 → 이름 → MY HUB
+  const p = normalizeProfile(getSettings(getDb()).profile);
+  const brand = (p.nameEn || p.name || "My Hub").toUpperCase();
   return (
-    <html lang="ko" className="h-full antialiased" suppressHydrationWarning>
+    <html lang="ko" className={`h-full antialiased ${poppins.variable}`} suppressHydrationWarning>
       <head>
         <script nonce={nonce} dangerouslySetInnerHTML={{ __html: themeScript }} />
         <script nonce={nonce} dangerouslySetInnerHTML={{ __html: swScript }} />
       </head>
       <body className="min-h-full flex flex-col">
-        <AppHeader />
-        <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-6">{children}</main>
+        <AppHeader brand={brand} />
+        <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-6">
+          <PageLabel />
+          {children}
+        </main>
+        <SiteFooter brand={brand} links={NAV} />
       </body>
     </html>
   );

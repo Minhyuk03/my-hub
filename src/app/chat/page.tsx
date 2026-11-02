@@ -47,7 +47,7 @@ export default async function ChatPage({ searchParams }: PageProps<"/chat">) {
   const providers = s.externalAiEnabled ? all : all.filter((p) => p.id === "local");
 
   return (
-    <div className="grid gap-4 lg:grid-cols-[16rem_1fr]">
+    <div className="grid grid-cols-[minmax(0,1fr)] gap-4 lg:grid-cols-[16rem_minmax(0,1fr)]">
       <aside className="space-y-2 lg:sticky lg:top-20 lg:self-start">
         <div className="flex items-center justify-between">
           <h2 className="text-sm font-semibold">대화</h2>

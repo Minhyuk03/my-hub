@@ -117,11 +117,12 @@ export function SearchPalette() {
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="order-last flex w-full items-center gap-2 rounded-md border px-3 py-1.5 text-left text-sm text-muted-foreground hover:bg-muted sm:order-none sm:ml-auto sm:w-72"
+        className="flex items-center gap-2 rounded-sm px-2 py-1.5 text-[11px] uppercase tracking-[0.25em] opacity-70 hover:bg-current/10 hover:opacity-100"
+        aria-label="검색 (⌘K)"
       >
         <Search className="size-4" />
-        <span className="flex-1">검색</span>
-        <kbd className="hidden rounded border px-1 text-xs sm:inline">⌘K</kbd>
+        <span className="hidden sm:inline">Search</span>
+        <kbd className="hidden rounded-sm border border-current/30 px-1 text-[10px] tracking-normal lg:inline">⌘K</kbd>
       </button>
       {open && (
         <div className="fixed inset-0 z-50 bg-black/40 p-2 pt-[10vh] sm:p-4 sm:pt-[12vh]" onMouseDown={() => setOpen(false)}>
