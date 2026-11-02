@@ -25,7 +25,8 @@ import { PasscodeForm } from "./passcode-form";
 import { DrivePicker } from "./drive-picker";
 import { NotionRootForm } from "./notion-form";
 import { notionWhoAmI } from "./notion-actions";
-import { addGitHubAccount, githubWhoAmI } from "./github-actions";
+import { githubWhoAmI } from "./github-actions";
+import { GitHubImportForm } from "./github-form";
 import { figmaWhoAmI, setFigmaFetchText } from "./figma-actions";
 import { FigmaTargetForm } from "./figma-form";
 import { disconnectDrive, setDriveTestingMode } from "./drive-actions";
@@ -242,18 +243,7 @@ export default async function SettingsPage({ searchParams }: PageProps<"/setting
                 </p>
               ))}
               {ghWho?.ok && !githubSources.length && (
-                <div className="flex flex-wrap gap-2">
-                  <form action={addGitHubAccount.bind(null, false)}>
-                    <Button type="submit" size="sm">
-                      내 저장소 가져오기
-                    </Button>
-                  </form>
-                  <form action={addGitHubAccount.bind(null, true)}>
-                    <Button type="submit" size="sm" variant="outline">
-                      포크한 저장소도 포함
-                    </Button>
-                  </form>
-                </div>
+                <GitHubImportForm />
               )}
             </>
           )}
