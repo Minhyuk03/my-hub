@@ -16,7 +16,7 @@ import { CommandButton } from "@/components/command-button";
 import { acceptProject, acceptProjectsAll, acceptTagsAll, rejectAi, runAiNow, saveAiSettings, setAiEnabled } from "./actions";
 import { TagChips } from "./tag-chips";
 import { ChatUpload } from "./chat-upload";
-import { addClaudeCodeSessions, acceptParaMoveAction, findParaMoves, rejectParaMoveAction } from "./actions";
+import { addClaudeCodeSessions, acceptParaMoveAction, findParaMoves, rejectParaMoveAction, rejectParaMovesAll } from "./actions";
 import { pendingParaMoves } from "@/server/projects/para-moves";
 import { ConfirmSubmit } from "@/app/settings/confirm-submit";
 
@@ -54,6 +54,15 @@ export default async function AiPage() {
          WHERE a.kind = ? AND a.status = 'pending' AND i.state != 'deleted' ORDER BY i.modified_at DESC LIMIT 100`,
       )
       .all(kind) as Row[];
+  // 화면에는 최근 100개만 보이므로 실제 대기 개수를 따로 센다
+  const pendingCount = (kind: string) =>
+    c
+      .prepare(`SELECT count(*) FROM ai_suggestions a JOIN items i ON i.id = a.item_id WHERE a.kind = ? AND a.status = 'pending' AND i.state != 'deleted'`)
+      .pluck()
+      .get(kind) as number;
+  const tagTotal = pendingCount("tags");
+  const projTotal = pendingCount("project");
+  const countLabel = (shown: number, total: number) => (total > shown ? `${total.toLocaleString()}개 중 최근 ${shown}개` : `${total}`);
   const tagRows = q("tags").map((r) => ({ ...r, p: JSON.parse(r.payload) as { tags: string[]; summary: string; para?: string } }));
   const projRows = q("project")
     .map((r) => ({ ...r, p: JSON.parse(r.payload) as { projectId: number; score: number } }))
@@ -168,7 +177,7 @@ export default async function AiPage() {
       <Card>
         <CardHeader>
           <CardTitle className="flex flex-wrap items-center gap-2">
-            프로젝트 제안 ({projRows.length})
+            프로젝트 제안 ({countLabel(projRows.length, projTotal)})
             {sure.length > 0 && sure.length < projRows.length && (
               <form action={acceptProjectsAll.bind(null, sure.map((r) => r.id))} className="ml-auto">
                 <Button type="submit" size="sm" variant="outline">
@@ -179,8 +188,15 @@ export default async function AiPage() {
             {projRows.length > 1 && (
               <form action={acceptProjectsAll.bind(null, projRows.map((r) => r.id))} className={sure.length > 0 && sure.length < projRows.length ? "" : "ml-auto"}>
                 <Button type="submit" size="sm" variant="outline">
-                  모두 수락
+                  {projTotal > projRows.length ? `보이는 ${projRows.length}개 수락` : "모두 수락"}
                 </Button>
+              </form>
+            )}
+            {projRows.length > 1 && (
+              <form action={rejectAi.bind(null, projRows.map((r) => r.id))}>
+                <ConfirmSubmit message={`보이는 프로젝트 제안 ${projRows.length}개를 모두 거절할까요? 거절한 제안은 다시 나오지 않습니다.`}>
+                  {projTotal > projRows.length ? `보이는 ${projRows.length}개 거절` : "모두 거절"}
+                </ConfirmSubmit>
               </form>
             )}
           </CardTitle>
@@ -221,7 +237,12 @@ export default async function AiPage() {
         <CardHeader>
           <CardTitle className="flex flex-wrap items-center gap-2">
             Obsidian 노트 정리 제안 ({paraRows.length})
-            <form action={findParaMoves} className="ml-auto">
+            {paraRows.length > 1 && (
+              <form action={rejectParaMovesAll.bind(null, paraRows.map((m) => m.id))} className="ml-auto">
+                <ConfirmSubmit message={`노트 정리 제안 ${paraRows.length}개를 모두 거절할까요?`}>모두 거절</ConfirmSubmit>
+              </form>
+            )}
+            <form action={findParaMoves} className={paraRows.length > 1 ? "" : "ml-auto"}>
               <Button type="submit" size="sm" variant="outline">
                 제안 다시 찾기
               </Button>
@@ -268,12 +289,19 @@ export default async function AiPage() {
       <Card>
         <CardHeader>
           <CardTitle className="flex flex-wrap items-center gap-2">
-            태그·요약 제안 ({tagRows.length})
+            태그·요약 제안 ({countLabel(tagRows.length, tagTotal)})
             {tagRows.length > 1 && (
               <form action={acceptTagsAll.bind(null, tagRows.map((r) => ({ id: r.id, tags: r.p.tags })))} className="ml-auto">
                 <Button type="submit" size="sm" variant="outline">
-                  모두 수락
+                  {tagTotal > tagRows.length ? `보이는 ${tagRows.length}개 수락` : "모두 수락"}
                 </Button>
+              </form>
+            )}
+            {tagRows.length > 1 && (
+              <form action={rejectAi.bind(null, tagRows.map((r) => r.id))}>
+                <ConfirmSubmit message={`보이는 태그·요약 제안 ${tagRows.length}개를 모두 거절할까요? 거절한 제안은 다시 나오지 않습니다.`}>
+                  {tagTotal > tagRows.length ? `보이는 ${tagRows.length}개 거절` : "모두 거절"}
+                </ConfirmSubmit>
               </form>
             )}
           </CardTitle>

@@ -93,3 +93,10 @@ export async function rejectParaMoveAction(id: number) {
   rejectParaMove(getDb(), id);
   refresh();
 }
+
+export async function rejectParaMovesAll(ids: number[]) {
+  const { rejectParaMove } = await import("@/server/projects/para-moves");
+  const db = getDb();
+  for (const id of ids) rejectParaMove(db, id);
+  refresh();
+}
