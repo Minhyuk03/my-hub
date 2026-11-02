@@ -1,5 +1,9 @@
+import fs from "node:fs";
+import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { EMPTY_PROFILE, imageSrc, linkHref, normalizeProfile } from "@/server/profile";
+import { referencedUploads, removeUnusedUploads, saveProfileImage } from "@/server/profile-images";
+import { tmpDir } from "./helpers";
 
 describe("자기소개 저장값 정리", () => {
   it("비었거나 깨진 값도 빈 자기소개로", () => {
@@ -34,5 +38,33 @@ describe("자기소개 저장값 정리", () => {
     expect(imageSrc("http://127.0.0.1:3000/items/77")).toBe("/api/items/77/file");
     expect(imageSrc("https://x.com/a.png")).toBe("https://x.com/a.png");
     expect(imageSrc("http://x.com/a.png")).toBe("");
+  });
+});
+
+describe("자기소개 사진 올리기", () => {
+  it("이미지만 무작위 이름으로 저장하고, upload: 값은 사진 주소가 된다", () => {
+    const dir = tmpDir();
+    expect(saveProfileImage("a.txt", "text/plain", Buffer.from("x"), dir)).toMatchObject({ ok: false });
+    expect(saveProfileImage("a.png", "image/png", Buffer.alloc(0), dir)).toMatchObject({ ok: false });
+    const r = saveProfileImage("내 사진.PNG", "image/png", Buffer.from("png"), dir);
+    expect(r.ok).toBe(true);
+    const ref = (r as { ref: string }).ref;
+    expect(ref).toMatch(/^upload:[a-f0-9]{16}\.png$/);
+    expect(fs.existsSync(path.join(dir, ref.slice(7)))).toBe(true);
+    expect(imageSrc(ref)).toBe(`/api/profile-images/${ref.slice(7)}`);
+    expect(imageSrc("upload:../../hub.db")).toBe("");
+  });
+
+  it("저장할 때 더 쓰지 않는 사진만, 한 시간 넘은 것만 지운다", () => {
+    const dir = tmpDir();
+    const used = (saveProfileImage("a.jpg", "image/jpeg", Buffer.from("1"), dir) as { ref: string }).ref;
+    const old = (saveProfileImage("b.jpg", "image/jpeg", Buffer.from("2"), dir) as { ref: string }).ref;
+    const fresh = (saveProfileImage("c.jpg", "image/jpeg", Buffer.from("3"), dir) as { ref: string }).ref;
+    const hourAgo = new Date(Date.now() - 2 * 3600_000);
+    for (const r of [used, old]) fs.utimesSync(path.join(dir, r.slice(7)), hourAgo, hourAgo);
+    const p = normalizeProfile({ photo: used });
+    expect(referencedUploads(p)).toEqual(new Set([used.slice(7)]));
+    expect(removeUnusedUploads(p, Date.now(), dir)).toBe(1);
+    expect(fs.readdirSync(dir).sort()).toEqual([used.slice(7), fresh.slice(7)].sort());
   });
 });

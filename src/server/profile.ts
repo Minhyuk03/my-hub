@@ -22,7 +22,7 @@ export type Profile = {
   nameEn: string;
   headline: string;
   about: string;
-  /** 프로필 사진: 허브 파일 번호·/items/번호·https 주소 */
+  /** 프로필 사진: 올린 사진(upload:이름)·허브 파일 번호·/items/번호·https 주소 */
   photo: string;
   /** 첫 화면 맨 위 배경 사진 (같은 형식) */
   hero: string;
@@ -192,9 +192,11 @@ export function linkHref(url: string) {
   return "";
 }
 
-/** 이미지 칸 값 → 화면에 쓸 주소. 허브 파일 번호·/items/번호 는 허브 파일, https 는 그대로 */
+/** 이미지 칸 값 → 화면에 쓸 주소. 올린 사진(upload:이름), 허브 파일 번호·/items/번호, https 주소 */
 export function imageSrc(ref: string): string {
   const r = ref.trim();
+  const up = r.match(/^upload:([a-f0-9]{16}\.(?:jpg|jpeg|png|webp|gif))$/)?.[1];
+  if (up) return `/api/profile-images/${up}`;
   const id = r.match(/^(\d+)$/)?.[1] ?? r.match(/\/items\/(\d+)/)?.[1];
   if (id) return `/api/items/${id}/file`;
   if (/^https:\/\//i.test(r)) return r;

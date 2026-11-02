@@ -1,17 +1,74 @@
 "use client";
 
-import { ArrowDown, ArrowUp, Plus, Trash2 } from "lucide-react";
+import { ArrowDown, ArrowUp, Plus, Trash2, Upload, X } from "lucide-react";
 import Link from "next/link";
-import { useState, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { EMPTY_PROFILE, imageSrc, PROFILE_FIELDS, PROFILE_LISTS, type FieldDef, type Profile, type ProfileListKey } from "@/server/profile";
-import { saveProfile } from "../actions";
+import { saveProfile, uploadProfileImage } from "../actions";
 
 type Row = Record<string, string | number | boolean | null>;
 const inputCls = "h-8";
 const areaCls = "min-h-20 w-full rounded-md border bg-background px-3 py-2 text-sm";
-const IMAGE_HINT = "허브 파일 번호(예: 1234) · 허브 파일 주소(/items/1234) · https 주소";
+const IMAGE_HINT = "올리기·끌어 놓기, 또는 허브 파일 번호(1234)·/items/1234·https 주소";
+
+/** 사진 칸: 업로드 버튼·끌어 놓기 + 직접 적기(허브 파일·주소) + 미리보기 */
+function ImageField({ id, value, onChange }: { id: string; value: string; onChange: (v: string) => void }) {
+  const input = useRef<HTMLInputElement>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [over, setOver] = useState(false);
+  const src = imageSrc(value);
+  const upload = async (file: File | undefined) => {
+    if (!file) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const form = new FormData();
+      form.set("image", file);
+      const r = await uploadProfileImage(form);
+      if (r.ok) onChange(r.ref);
+      else setError(r.message);
+    } catch (e) {
+      setError(`올리지 못했습니다: ${(e as Error).message}`);
+    } finally {
+      setBusy(false);
+      if (input.current) input.current.value = "";
+    }
+  };
+  return (
+    <div
+      className={`space-y-1 rounded-md ${over ? "ring-2 ring-primary" : ""}`}
+      onDragOver={(e) => {
+        e.preventDefault();
+        setOver(true);
+      }}
+      onDragLeave={() => setOver(false)}
+      onDrop={(e) => {
+        e.preventDefault();
+        setOver(false);
+        void upload(e.dataTransfer.files[0]);
+      }}
+    >
+      <div className="flex items-center gap-2">
+        {/* eslint-disable-next-line @next/next/no-img-element -- 올린 사진·허브 파일·외부 주소 미리보기 */}
+        {src ? <img src={src} alt="" className="size-10 shrink-0 rounded-sm object-cover" /> : <div className="size-10 shrink-0 rounded-sm border border-dashed" />}
+        <Input id={id} className={inputCls} value={value.startsWith("upload:") ? "올린 사진" : value} readOnly={value.startsWith("upload:")} placeholder={IMAGE_HINT} onChange={(e) => onChange(e.target.value)} />
+        <input ref={input} id={`${id}-file`} type="file" accept="image/jpeg,image/png,image/webp,image/gif" className="hidden" onChange={(e) => void upload(e.target.files?.[0])} />
+        <Button type="button" variant="outline" size="sm" className="h-8 shrink-0" disabled={busy} onClick={() => input.current?.click()}>
+          <Upload className="size-3.5" /> {busy ? "올리는 중…" : "업로드"}
+        </Button>
+        {value && (
+          <Button type="button" variant="ghost" size="sm" className="h-8 shrink-0 px-2" onClick={() => onChange("")} aria-label="사진 빼기" title="사진 빼기">
+            <X className="size-3.5" />
+          </Button>
+        )}
+      </div>
+      {error && <p className="text-xs text-destructive">{error}</p>}
+    </div>
+  );
+}
 
 /** 칸 하나: 글 / 여러 줄 / 별점 / 이미지(미리보기) */
 function Field({ id, def, value, onChange }: { id: string; def: FieldDef; value: string; onChange: (v: string) => void }) {
@@ -26,16 +83,7 @@ function Field({ id, def, value, onChange }: { id: string; def: FieldDef; value:
         ))}
       </select>
     );
-  if (def.type === "image") {
-    const src = imageSrc(value);
-    return (
-      <div className="flex items-center gap-2">
-        <Input id={id} className={inputCls} value={value} placeholder={IMAGE_HINT} onChange={(e) => onChange(e.target.value)} />
-        {/* eslint-disable-next-line @next/next/no-img-element -- 허브 파일·외부 주소 미리보기 */}
-        {src && <img src={src} alt="" className="size-8 shrink-0 rounded object-cover" />}
-      </div>
-    );
-  }
+  if (def.type === "image") return <ImageField id={id} value={value} onChange={onChange} />;
   return <Input id={id} className={inputCls} value={value} placeholder={def.placeholder} onChange={(e) => onChange(e.target.value)} />;
 }
 
