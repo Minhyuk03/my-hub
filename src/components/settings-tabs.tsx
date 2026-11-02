@@ -17,7 +17,7 @@ export function SettingsTabs({ current }: { current: string }) {
           key={t.href}
           href={t.href}
           aria-current={t.href === current ? "page" : undefined}
-          className={`shrink-0 border-b-2 px-3 py-2 ${t.href === current ? "border-foreground font-medium" : "border-transparent text-muted-foreground hover:text-foreground"}`}
+          className={`shrink-0 border-b-2 px-3 py-2 tracking-wide ${t.href === current ? "border-primary text-foreground" : "border-transparent text-muted-foreground hover:text-foreground"}`}
         >
           {t.label}
         </Link>
