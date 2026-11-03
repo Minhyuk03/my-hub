@@ -6,7 +6,7 @@ import { HeroFx, heroBackdropStyle, heroTextStyle } from "@/components/hero-fx";
 import { Button } from "@/components/ui/button";
 import { getDb } from "@/server/db";
 import { projects } from "@/server/db/schema";
-import { imageSrc, linkHref, normalizeProfile, stars, type Profile } from "@/server/profile";
+import { imagePos, imageSrc, linkHref, normalizeProfile, stars, type Profile } from "@/server/profile";
 import { membershipSql, projectItemList } from "@/server/projects";
 import { getSettings } from "@/server/settings";
 import { addHubProject } from "./profile/actions";
@@ -68,8 +68,8 @@ function Block({ title, to, empty, children }: { title: string; to: string; empt
 }
 
 /** 사진 자리: 사진이 없으면 "사진 넣기" 안내 칸 */
-function Photo({ src, className, hint = "사진 넣기", dark = false }: { src: string; className: string; hint?: string; dark?: boolean }) {
-  if (src) return <CoverImage src={src} className={className} />;
+function Photo({ src, pos, className, hint = "사진 넣기", dark = false }: { src: string; pos?: string; className: string; hint?: string; dark?: boolean }) {
+  if (src) return <CoverImage src={src} position={pos} className={className} />;
   return (
     <Link
       href="/profile/edit#basics"
@@ -117,6 +117,7 @@ export default async function ProfilePage({ searchParams }: PageProps<"/">) {
       ...x,
       hub,
       cover: imageSrc(x.cover) || (hub ? hubCover(hub.id) : ""),
+      coverPos: imageSrc(x.cover) ? imagePos(x.cover) : undefined,
       files: hub ? projectItemList(db, hub.id, { limit: 1 }).total : 0,
     };
   });
@@ -135,7 +136,10 @@ export default async function ProfilePage({ searchParams }: PageProps<"/">) {
 
   const hero = imageSrc(p.hero);
   const photo = imageSrc(p.photo);
-  const aboutSecond = works.find((w) => w.cover)?.cover ?? "";
+  const heroPos = imagePos(p.hero);
+  const photoPos = imagePos(p.photo);
+  const aboutWork = works.find((w) => w.cover);
+  const aboutSecond = aboutWork?.cover ?? "";
   const brand = (p.nameEn || p.name || "My Hub").toUpperCase();
   const skills = [...p.skills].sort((a, b) => stars(b.level) - stars(a.level));
   const blank = !p.name && !p.headline && !p.about && !p.projects.length;
@@ -148,7 +152,7 @@ export default async function ProfilePage({ searchParams }: PageProps<"/">) {
       {/* sticky 에서는 left 가 붙는 기준이 되므로 화면 끝까지 늘리기를 여백으로 한다 */}
       <HeroFx className="sticky top-0 isolate z-0 ml-[calc(50%-50vw)] w-screen overflow-hidden bg-neutral-700 text-white">
         <div className="absolute inset-0 -z-20" style={heroBackdropStyle}>
-          {hero ? <CoverImage src={hero} className="size-full" /> : <div className="size-full bg-gradient-to-br from-stone-500 via-stone-600 to-stone-800" />}
+          {hero ? <CoverImage src={hero} position={heroPos} className="size-full" /> : <div className="size-full bg-gradient-to-br from-stone-500 via-stone-600 to-stone-800" />}
         </div>
         <div className="absolute inset-0 -z-10 bg-black/35" />
         <div className="mx-auto grid min-h-[100svh] max-w-6xl items-center gap-10 px-4 pt-32 pb-16 md:grid-cols-[1fr_22rem]" style={heroTextStyle}>
@@ -181,7 +185,7 @@ export default async function ProfilePage({ searchParams }: PageProps<"/">) {
           </div>
           {/* 오른쪽에 겹쳐 놓인 사진 (테마의 슬라이드 자리) */}
           <div className="hidden md:block">
-            <Photo src={photo} hint="프로필 사진 넣기" dark className="aspect-[4/5] w-full shadow-2xl" />
+            <Photo src={photo} pos={photoPos} hint="프로필 사진 넣기" dark className="aspect-[4/5] w-full shadow-2xl" />
           </div>
         </div>
       </HeroFx>
@@ -208,8 +212,8 @@ export default async function ProfilePage({ searchParams }: PageProps<"/">) {
             {/* About: 왼쪽 엇갈린 사진 두 장, 오른쪽 정렬 글 */}
             <section id="about" className={`${panel} grid scroll-mt-20 items-center gap-12 md:grid-cols-2`}>
               <div className="grid grid-cols-2 items-start gap-4">
-                <Photo src={photo} className="aspect-[3/4] w-full" />
-                <Photo src={aboutSecond || hero} hint="프로젝트 표지나 배경 사진이 여기 보입니다" className="mt-16 aspect-square w-full p-4 text-center" />
+                <Photo src={photo} pos={photoPos} className="aspect-[3/4] w-full" />
+                <Photo src={aboutSecond || hero} pos={aboutSecond ? aboutWork?.coverPos : heroPos} hint="프로젝트 표지나 배경 사진이 여기 보입니다" className="mt-16 aspect-square w-full p-4 text-center" />
               </div>
               <div className="space-y-6 md:text-right">
                 <h2 className="text-2xl font-normal tracking-[0.2em]">About me :</h2>
@@ -346,7 +350,7 @@ export default async function ProfilePage({ searchParams }: PageProps<"/">) {
                     <figure key={i} className="mb-8 break-inside-avoid">
                       <a href={href} target={external ? "_blank" : undefined} rel="noreferrer" className="group relative block overflow-hidden bg-muted">
                         {w.cover ? (
-                          <CoverImage src={w.cover} className={`w-full transition-transform duration-500 group-hover:scale-105 ${i % 3 === 1 ? "aspect-[4/5]" : "aspect-[4/3]"}`} />
+                          <CoverImage src={w.cover} position={w.coverPos} className={`w-full transition-transform duration-500 group-hover:scale-105 ${i % 3 === 1 ? "aspect-[4/5]" : "aspect-[4/3]"}`} />
                         ) : (
                           <div className={`flex w-full items-center justify-center bg-stone-200 p-6 text-center text-stone-500 dark:bg-stone-800 dark:text-stone-400 ${i % 3 === 1 ? "aspect-[4/5]" : "aspect-[4/3]"}`}>
                             <span className="tracking-[0.15em]">{w.title || "Project"}</span>

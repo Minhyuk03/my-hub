@@ -1,11 +1,11 @@
 "use client";
 
-import { ArrowDown, ArrowUp, Plus, Trash2, Upload, X } from "lucide-react";
+import { ArrowDown, ArrowUp, Crop, Plus, Trash2, Upload, X } from "lucide-react";
 import Link from "next/link";
 import { useRef, useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { EMPTY_PROFILE, imageSrc, PROFILE_FIELDS, PROFILE_LISTS, type FieldDef, type Profile, type ProfileListKey } from "@/server/profile";
+import { EMPTY_PROFILE, imageSrc, PROFILE_FIELDS, splitImageRef, withImagePos, PROFILE_LISTS, type FieldDef, type Profile, type ProfileListKey } from "@/server/profile";
 import { saveProfile, uploadProfileImage } from "../actions";
 
 type Row = Record<string, string | number | boolean | null>;
@@ -13,13 +13,76 @@ const inputCls = "h-8";
 const areaCls = "min-h-20 w-full rounded-md border bg-background px-3 py-2 text-sm";
 const IMAGE_HINT = "올리기·끌어 놓기, 또는 허브 파일 번호(1234)·/items/1234·https 주소";
 
-/** 사진 칸: 업로드 버튼·끌어 놓기 + 직접 적기(허브 파일·주소) + 미리보기 */
-function ImageField({ id, value, onChange }: { id: string; value: string; onChange: (v: string) => void }) {
+type Frame = { label: string; cls: string };
+/** 첫 화면에서 사진이 들어가는 칸 모양 (위치 고르기 미리보기용) */
+const FRAMES: Record<string, Frame[]> = {
+  hero: [
+    { label: "넓은 화면", cls: "aspect-video w-44" },
+    { label: "휴대폰", cls: "aspect-[9/19] w-20" },
+  ],
+  photo: [{ label: "프로필", cls: "aspect-[4/5] w-28" }],
+  cover: [
+    { label: "가로 칸", cls: "aspect-[4/3] w-32" },
+    { label: "세로 칸", cls: "aspect-[4/5] w-28" },
+  ],
+};
+
+/** 보일 위치 고르기: 원본 위를 누르거나 끌면 그 부분이 칸 안에 남는다. 옆에 실제 칸 모양 미리보기 */
+function FocusPicker({ src, x, y, frames, onChange }: { src: string; x: number; y: number; frames: Frame[]; onChange: (x: number, y: number) => void }) {
+  const box = useRef<HTMLDivElement>(null);
+  const set = (e: React.PointerEvent) => {
+    const r = box.current!.getBoundingClientRect();
+    onChange(((e.clientX - r.left) / r.width) * 100, ((e.clientY - r.top) / r.height) * 100);
+  };
+  return (
+    // 사진 칸이 <label> 안에 있어서, 누른 것이 label 의 다른 버튼(위치·업로드)으로 넘어가지 않게 막는다
+    <div className="flex flex-wrap items-start gap-4 rounded-md border bg-muted/30 p-3" onClick={(e) => e.preventDefault()}>
+      <div className="space-y-1">
+        <p className="text-xs text-muted-foreground">남길 부분을 누르거나 끌어서 고르세요</p>
+        <div
+          ref={box}
+          className="relative inline-block cursor-crosshair touch-none select-none"
+          onPointerDown={(e) => {
+            e.currentTarget.setPointerCapture(e.pointerId);
+            set(e);
+          }}
+          onPointerMove={(e) => {
+            if (e.buttons) set(e);
+          }}
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element -- 원본 전체 보기 */}
+          <img src={src} alt="" draggable={false} className="block max-h-72 max-w-full rounded-sm" />
+          <span
+            className="pointer-events-none absolute size-5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white shadow ring-1 ring-black/40"
+            style={{ left: `${x}%`, top: `${y}%` }}
+          />
+        </div>
+      </div>
+      <div className="flex flex-wrap items-end gap-3">
+        {frames.map((f) => (
+          <figure key={f.label} className="space-y-1">
+            {/* eslint-disable-next-line @next/next/no-img-element -- 칸 모양 미리보기 */}
+            <img src={src} alt="" className={`${f.cls} rounded-sm object-cover`} style={{ objectPosition: `${x}% ${y}%` }} />
+            <figcaption className="text-[11px] text-muted-foreground">{f.label}</figcaption>
+          </figure>
+        ))}
+        <Button type="button" variant="ghost" size="sm" className="h-7 text-xs" onClick={() => onChange(50, 50)}>
+          가운데로
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+/** 사진 칸: 업로드 버튼·끌어 놓기 + 직접 적기(허브 파일·주소) + 미리보기 + 보일 위치 */
+function ImageField({ id, value, frames, onChange }: { id: string; value: string; frames: Frame[]; onChange: (v: string) => void }) {
   const input = useRef<HTMLInputElement>(null);
+  const [crop, setCrop] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [over, setOver] = useState(false);
   const src = imageSrc(value);
+  const { ref: base, x, y } = splitImageRef(value);
   const upload = async (file: File | undefined) => {
     if (!file) return;
     setBusy(true);
@@ -28,7 +91,10 @@ function ImageField({ id, value, onChange }: { id: string; value: string; onChan
       const form = new FormData();
       form.set("image", file);
       const r = await uploadProfileImage(form);
-      if (r.ok) onChange(r.ref);
+      if (r.ok) {
+        onChange(r.ref);
+        setCrop(true);
+      }
       else setError(r.message);
     } catch (e) {
       setError(`올리지 못했습니다: ${(e as Error).message}`);
@@ -53,18 +119,24 @@ function ImageField({ id, value, onChange }: { id: string; value: string; onChan
     >
       <div className="flex items-center gap-2">
         {/* eslint-disable-next-line @next/next/no-img-element -- 올린 사진·허브 파일·외부 주소 미리보기 */}
-        {src ? <img src={src} alt="" className="size-10 shrink-0 rounded-sm object-cover" /> : <div className="size-10 shrink-0 rounded-sm border border-dashed" />}
-        <Input id={id} className={inputCls} value={value.startsWith("upload:") ? "올린 사진" : value} readOnly={value.startsWith("upload:")} placeholder={IMAGE_HINT} onChange={(e) => onChange(e.target.value)} />
+        {src ? <img src={src} alt="" className="size-10 shrink-0 rounded-sm object-cover" style={{ objectPosition: `${x}% ${y}%` }} /> : <div className="size-10 shrink-0 rounded-sm border border-dashed" />}
+        <Input id={id} className={inputCls} value={base.startsWith("upload:") ? "올린 사진" : base} readOnly={base.startsWith("upload:")} placeholder={IMAGE_HINT} onChange={(e) => onChange(withImagePos(e.target.value, x, y))} />
         <input ref={input} id={`${id}-file`} type="file" accept="image/jpeg,image/png,image/webp,image/gif" className="hidden" onChange={(e) => void upload(e.target.files?.[0])} />
         <Button type="button" variant="outline" size="sm" className="h-8 shrink-0" disabled={busy} onClick={() => input.current?.click()}>
           <Upload className="size-3.5" /> {busy ? "올리는 중…" : "업로드"}
         </Button>
+        {src && (
+          <Button type="button" variant={crop ? "secondary" : "ghost"} size="sm" className="h-8 shrink-0" onClick={() => setCrop(!crop)} aria-expanded={crop} title="사진이 잘릴 때 보일 부분 고르기">
+            <Crop className="size-3.5" /> 위치
+          </Button>
+        )}
         {value && (
           <Button type="button" variant="ghost" size="sm" className="h-8 shrink-0 px-2" onClick={() => onChange("")} aria-label="사진 빼기" title="사진 빼기">
             <X className="size-3.5" />
           </Button>
         )}
       </div>
+      {crop && src && <FocusPicker src={src} x={x} y={y} frames={frames} onChange={(nx, ny) => onChange(withImagePos(base, nx, ny))} />}
       {error && <p className="text-xs text-destructive">{error}</p>}
     </div>
   );
@@ -83,7 +155,7 @@ function Field({ id, def, value, onChange }: { id: string; def: FieldDef; value:
         ))}
       </select>
     );
-  if (def.type === "image") return <ImageField id={id} value={value} onChange={onChange} />;
+  if (def.type === "image") return <ImageField id={id} value={value} frames={FRAMES[def.key] ?? FRAMES.cover} onChange={onChange} />;
   return <Input id={id} className={inputCls} value={value} placeholder={def.placeholder} onChange={(e) => onChange(e.target.value)} />;
 }
 

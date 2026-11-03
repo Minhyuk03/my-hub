@@ -192,9 +192,32 @@ export function linkHref(url: string) {
   return "";
 }
 
+/**
+ * 이미지 칸 값 끝의 "#가로,세로" (0~100) 는 사진을 칸에 맞춰 자를 때 보일 위치.
+ * 세로로 긴 사진은 위아래가, 가로로 긴 사진은 양옆이 잘리는데 그때 어느 부분을 남길지 정한다. 없으면 가운데.
+ */
+export function splitImageRef(ref: string): { ref: string; x: number; y: number } {
+  const m = ref.trim().match(/^(.*?)#(\d{1,3}),(\d{1,3})$/);
+  if (!m) return { ref: ref.trim(), x: 50, y: 50 };
+  return { ref: m[1], x: Math.min(100, Number(m[2])), y: Math.min(100, Number(m[3])) };
+}
+
+/** 보일 위치를 붙인 값. 가운데면 붙이지 않는다 */
+export function withImagePos(ref: string, x: number, y: number): string {
+  const base = splitImageRef(ref).ref;
+  const [cx, cy] = [Math.round(Math.min(100, Math.max(0, x))), Math.round(Math.min(100, Math.max(0, y)))];
+  return !base || (cx === 50 && cy === 50) ? base : `${base}#${cx},${cy}`;
+}
+
+/** CSS object-position 값 ("50% 20%") */
+export function imagePos(ref: string): string {
+  const { x, y } = splitImageRef(ref);
+  return `${x}% ${y}%`;
+}
+
 /** 이미지 칸 값 → 화면에 쓸 주소. 올린 사진(upload:이름), 허브 파일 번호·/items/번호, https 주소 */
 export function imageSrc(ref: string): string {
-  const r = ref.trim();
+  const r = splitImageRef(ref).ref;
   const up = r.match(/^upload:([a-f0-9]{16}\.(?:jpg|jpeg|png|webp|gif))$/)?.[1];
   if (up) return `/api/profile-images/${up}`;
   const id = r.match(/^(\d+)$/)?.[1] ?? r.match(/\/items\/(\d+)/)?.[1];

@@ -6,7 +6,7 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { DATA_DIR } from "@/lib/config";
-import type { Profile } from "./profile";
+import { splitImageRef, type Profile } from "./profile";
 
 export const PROFILE_IMAGE_DIR = path.join(DATA_DIR, "profile-images");
 export const PROFILE_IMAGE_TYPES: Record<string, string> = { jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png", webp: "image/webp", gif: "image/gif" };
@@ -30,7 +30,7 @@ export function saveProfileImage(fileName: string, mime: string, data: Buffer, d
 /** 자기소개에서 쓰는 업로드 이름들 */
 export function referencedUploads(p: Profile): Set<string> {
   const refs = [p.photo, p.hero, ...p.projects.map((x) => x.cover)];
-  return new Set(refs.map((r) => r.trim().match(/^upload:(.+)$/)?.[1]).filter((x): x is string => !!x));
+  return new Set(refs.map((r) => splitImageRef(r).ref.match(/^upload:(.+)$/)?.[1]).filter((x): x is string => !!x));
 }
 
 /** 더 쓰지 않는 업로드 지우기. 방금 올리고 아직 저장 전인 파일을 지우지 않게 한 시간 넘은 것만 */

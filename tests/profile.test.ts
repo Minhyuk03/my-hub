@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { EMPTY_PROFILE, imageSrc, linkHref, normalizeProfile } from "@/server/profile";
+import { EMPTY_PROFILE, imagePos, imageSrc, linkHref, normalizeProfile, splitImageRef, withImagePos } from "@/server/profile";
 import { referencedUploads, removeUnusedUploads, saveProfileImage } from "@/server/profile-images";
 import { tmpDir } from "./helpers";
 
@@ -39,6 +39,17 @@ describe("자기소개 저장값 정리", () => {
     expect(imageSrc("https://x.com/a.png")).toBe("https://x.com/a.png");
     expect(imageSrc("http://x.com/a.png")).toBe("");
   });
+
+  it("이미지 보일 위치: 값 끝의 #가로,세로 는 주소에서 빼고 object-position 으로", () => {
+    expect(withImagePos("upload:0123456789abcdef.jpg", 30.4, 120)).toBe("upload:0123456789abcdef.jpg#30,100");
+    expect(withImagePos("upload:0123456789abcdef.jpg#30,10", 50, 50)).toBe("upload:0123456789abcdef.jpg");
+    expect(withImagePos("", 10, 10)).toBe("");
+    expect(imageSrc("upload:0123456789abcdef.jpg#30,10")).toBe("/api/profile-images/0123456789abcdef.jpg");
+    expect(imageSrc("1234#0,100")).toBe("/api/items/1234/file");
+    expect(imagePos("1234#0,100")).toBe("0% 100%");
+    expect(imagePos("1234")).toBe("50% 50%");
+    expect(splitImageRef("https://x.com/a.png#frag")).toEqual({ ref: "https://x.com/a.png#frag", x: 50, y: 50 });
+  });
 });
 
 describe("자기소개 사진 올리기", () => {
@@ -62,7 +73,8 @@ describe("자기소개 사진 올리기", () => {
     const fresh = (saveProfileImage("c.jpg", "image/jpeg", Buffer.from("3"), dir) as { ref: string }).ref;
     const hourAgo = new Date(Date.now() - 2 * 3600_000);
     for (const r of [used, old]) fs.utimesSync(path.join(dir, r.slice(7)), hourAgo, hourAgo);
-    const p = normalizeProfile({ photo: used });
+    // 보일 위치를 붙여도 쓰는 사진으로 센다
+    const p = normalizeProfile({ photo: `${used}#40,20` });
     expect(referencedUploads(p)).toEqual(new Set([used.slice(7)]));
     expect(removeUnusedUploads(p, Date.now(), dir)).toBe(1);
     expect(fs.readdirSync(dir).sort()).toEqual([used.slice(7), fresh.slice(7)].sort());
