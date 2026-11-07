@@ -118,8 +118,33 @@ function ImageField({ id, value, frames, onChange }: { id: string; value: string
       }}
     >
       <div className="flex items-center gap-2">
-        {/* eslint-disable-next-line @next/next/no-img-element -- 올린 사진·허브 파일·외부 주소 미리보기 */}
-        {src ? <img src={src} alt="" className="size-10 shrink-0 rounded-sm object-cover" style={{ objectPosition: `${x}% ${y}%` }} /> : <div className="size-10 shrink-0 rounded-sm border border-dashed" />}
+        {/* 네모 칸을 눌러도 사진 고르기가 열린다. <label> 안이라 button 대신 span: label 이 이 칸을 대상으로 잡지 않게 한다 */}
+        <span
+          role="button"
+          tabIndex={0}
+          title="눌러서 사진 고르기"
+          aria-label="사진 고르기"
+          className="size-10 shrink-0 cursor-pointer rounded-sm hover:ring-2 hover:ring-primary/50"
+          onClick={(e) => {
+            e.preventDefault();
+            if (!busy) input.current?.click();
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              if (!busy) input.current?.click();
+            }
+          }}
+        >
+          {src ? (
+            // eslint-disable-next-line @next/next/no-img-element -- 올린 사진·허브 파일·외부 주소 미리보기
+            <img src={src} alt="" className="size-10 rounded-sm object-cover" style={{ objectPosition: `${x}% ${y}%` }} />
+          ) : (
+            <span className="flex size-10 items-center justify-center rounded-sm border border-dashed text-muted-foreground">
+              <Upload className="size-3.5" />
+            </span>
+          )}
+        </span>
         <Input id={id} className={inputCls} value={base.startsWith("upload:") ? "올린 사진" : base} readOnly={base.startsWith("upload:")} placeholder={IMAGE_HINT} onChange={(e) => onChange(withImagePos(e.target.value, x, y))} />
         <input ref={input} id={`${id}-file`} type="file" accept="image/jpeg,image/png,image/webp,image/gif" className="hidden" onChange={(e) => void upload(e.target.files?.[0])} />
         <Button type="button" variant="outline" size="sm" className="h-8 shrink-0" disabled={busy} onClick={() => input.current?.click()}>
