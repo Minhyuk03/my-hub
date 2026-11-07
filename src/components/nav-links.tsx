@@ -7,7 +7,8 @@ import { usePathname } from "next/navigation";
 export function NavLinks({ items }: { items: { href: string; label: string; title?: string }[] }) {
   const pathname = usePathname();
   return (
-    <nav className="flex gap-6 overflow-x-auto text-[11px] font-normal uppercase tracking-[0.25em] whitespace-nowrap">
+    // 휴대폰에서만 옆으로 밀 수 있게(스크롤바는 숨김). 넓은 화면은 다 들어가므로 넘침을 자르지 않는다 (마지막 글자 자간·밑줄 때문에 스크롤바가 생기던 문제)
+    <nav className="flex gap-6 overflow-x-auto overflow-y-hidden pb-1 text-[11px] font-normal uppercase tracking-[0.25em] whitespace-nowrap [scrollbar-width:none] sm:overflow-visible [&::-webkit-scrollbar]:hidden">
       {items.map((n) => {
         const active = pathname === n.href || pathname.startsWith(n.href + "/");
         return (
