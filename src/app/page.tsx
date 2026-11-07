@@ -9,7 +9,8 @@ import { projects } from "@/server/db/schema";
 import { imagePos, imageSrc, linkHref, normalizeProfile, stars, type Profile } from "@/server/profile";
 import { membershipSql, projectItemList } from "@/server/projects";
 import { getSettings } from "@/server/settings";
-import { addHubProject } from "./profile/actions";
+import { addHubProject, removeProfileProject } from "./profile/actions";
+import { ConfirmSubmit } from "./settings/confirm-submit";
 
 // 아임웹 MULTIPLY 테마 느낌: 화면 끝까지 닿는 배경 사진 위 큰 가는 글씨(맨 위 메뉴 줄이 투명하게 겹침).
 // 배경 사진은 끝까지 화면에 붙어 있고, 아래 내용은 반투명 판으로 그 위에 떠오른다(사진은 흐려진 채 계속 보임)
@@ -111,10 +112,11 @@ export default async function ProfilePage({ searchParams }: PageProps<"/">) {
       .get(...m.params) as number | undefined;
     return id ? `/api/items/${id}/file` : "";
   };
-  const works = p.projects.map((x) => {
+  const works = p.projects.map((x, index) => {
     const hub = x.projectId ? hubById.get(x.projectId) : undefined;
     return {
       ...x,
+      index,
       hub,
       cover: imageSrc(x.cover) || (hub ? hubCover(hub.id) : ""),
       coverPos: imageSrc(x.cover) ? imagePos(x.cover) : undefined,
@@ -376,6 +378,14 @@ export default async function ProfilePage({ searchParams }: PageProps<"/">) {
                           </Link>
                         )}
                         {w.projectId && !w.hub && <p className="text-xs text-destructive">연결한 허브 프로젝트가 없어졌습니다. 편집에서 다시 고르세요.</p>}
+                        <form action={removeProfileProject.bind(null, w.index, w.title)}>
+                          <ConfirmSubmit
+                            message={`'${w.title || w.hub?.name || "이름 없음"}'을(를) 자기소개 Project 에서 뺄까요? 적어 둔 설명도 함께 지워집니다. 허브 프로젝트와 파일은 그대로 남습니다.`}
+                            className="-ml-2 h-6 px-2 text-[11px] text-muted-foreground hover:text-destructive"
+                          >
+                            빼기
+                          </ConfirmSubmit>
+                        </form>
                       </figcaption>
                     </figure>
                   );

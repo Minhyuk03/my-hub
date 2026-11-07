@@ -34,3 +34,15 @@ export async function addHubProject(projectId: number) {
   setSetting(db, "profile", p);
   refresh();
 }
+
+/** 첫 화면 Project 카드의 "빼기": 포트폴리오 항목만 지운다 (허브 프로젝트와 파일은 그대로).
+ * 순서가 바뀐 사이에 엉뚱한 항목을 지우지 않도록 제목까지 맞는지 확인한다 */
+export async function removeProfileProject(index: number, title: string) {
+  const db = getDb();
+  const p = normalizeProfile(getSettings(db).profile);
+  if (p.projects[index]?.title !== title) return;
+  p.projects.splice(index, 1);
+  setSetting(db, "profile", p);
+  removeUnusedUploads(p);
+  refresh();
+}
