@@ -22,8 +22,8 @@ const FRAMES: Record<string, Frame[]> = {
   ],
   photo: [{ label: "프로필", cls: "aspect-[4/5] w-28" }],
   cover: [
-    { label: "가로 칸", cls: "aspect-[4/3] w-32" },
-    { label: "세로 칸", cls: "aspect-[4/5] w-28" },
+    // 첫 화면의 프로젝트 표지는 모두 같은 가로 칸(4:3)
+    { label: "표지 칸", cls: "aspect-[4/3] w-32" },
   ],
 };
 

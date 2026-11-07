@@ -344,17 +344,17 @@ export default async function ProfilePage({ searchParams }: PageProps<"/">) {
                   <Empty to="projects">아래 허브 프로젝트에서 고르거나 편집에서 추가하세요</Empty>
                 </p>
               )}
-              <div className="columns-1 gap-5 sm:columns-2 lg:columns-3">
+              <div className="grid gap-x-5 gap-y-8 sm:grid-cols-2 lg:grid-cols-3">
                 {shown.map((w, i) => {
                   const href = w.hub ? `/projects/${w.hub.id}` : linkHref(w.url) || "/profile/edit#projects";
                   const external = !w.hub && !!linkHref(w.url);
                   return (
-                    <figure key={i} className="mb-8 break-inside-avoid">
+                    <figure key={i}>
                       <a href={href} target={external ? "_blank" : undefined} rel="noreferrer" className="group relative block overflow-hidden bg-muted">
                         {w.cover ? (
-                          <CoverImage src={w.cover} position={w.coverPos} className={`w-full transition-transform duration-500 group-hover:scale-105 ${i % 3 === 1 ? "aspect-[4/5]" : "aspect-[4/3]"}`} />
+                          <CoverImage src={w.cover} position={w.coverPos} className="aspect-[4/3] w-full transition-transform duration-500 group-hover:scale-105" />
                         ) : (
-                          <div className={`flex w-full items-center justify-center bg-stone-200 p-6 text-center text-stone-500 dark:bg-stone-800 dark:text-stone-400 ${i % 3 === 1 ? "aspect-[4/5]" : "aspect-[4/3]"}`}>
+                          <div className="flex aspect-[4/3] w-full items-center justify-center bg-stone-200 p-6 text-center text-stone-500 dark:bg-stone-800 dark:text-stone-400">
                             <span className="tracking-[0.15em]">{w.title || "Project"}</span>
                           </div>
                         )}
