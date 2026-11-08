@@ -1,4 +1,4 @@
-import { Pencil, Plus } from "lucide-react";
+import { ArrowUpRight, Pencil, Plus } from "lucide-react";
 import Link from "next/link";
 import { connection } from "next/server";
 import { CoverImage } from "@/components/cover-image";
@@ -65,6 +65,49 @@ function Block({ title, to, empty, children }: { title: string; to: string; empt
       <h3 className={`${label} text-[var(--taupe)]`}>{title}</h3>
       {empty ? <Empty to={to} /> : children}
     </section>
+  );
+}
+
+/** 주소를 짧게: https://www.instagram.com/a_ls_life/ → instagram.com/a_ls_life */
+function shortUrl(url: string) {
+  return url.replace(/^(https?:\/\/)?(www\.)?/i, "").replace(/\/+$/, "");
+}
+
+/** About 사진 옆 SNS 칸 (사진 한 장과 엇갈리게 아래로 내려 놓는다) */
+function SnsCard({ sns }: { sns: Profile["sns"] }) {
+  return (
+    <div className="mt-16 space-y-4 border-t border-[var(--taupe)] pt-4">
+      <h3 className={`${label} text-[var(--taupe)]`}>Follow</h3>
+      {sns.length ? (
+        <ul className="space-y-3">
+          {sns.map((s, i) => {
+            const href = linkHref(s.url);
+            const body = (
+              <>
+                <span className="min-w-0">
+                  <span className="block text-sm font-normal">{s.title || shortUrl(s.url)}</span>
+                  <span className="block truncate text-xs text-muted-foreground">{s.desc || shortUrl(s.url)}</span>
+                </span>
+                {href && <ArrowUpRight className="size-3.5 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5 group-hover:text-foreground" />}
+              </>
+            );
+            return (
+              <li key={i}>
+                {href ? (
+                  <a href={href} target="_blank" rel="noreferrer" className="group flex items-start justify-between gap-2 border-b pb-3">
+                    {body}
+                  </a>
+                ) : (
+                  <div className="flex items-start justify-between gap-2 border-b pb-3">{body}</div>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      ) : (
+        <Empty to="sns">SNS 넣기</Empty>
+      )}
+    </div>
   );
 }
 
@@ -140,8 +183,6 @@ export default async function ProfilePage({ searchParams }: PageProps<"/">) {
   const photo = imageSrc(p.photo);
   const heroPos = imagePos(p.hero);
   const photoPos = imagePos(p.photo);
-  const aboutWork = works.find((w) => w.cover);
-  const aboutSecond = aboutWork?.cover ?? "";
   const brand = (p.nameEn || p.name || "My Hub").toUpperCase();
   const skills = [...p.skills].sort((a, b) => stars(b.level) - stars(a.level));
   const blank = !p.name && !p.headline && !p.about && !p.projects.length;
@@ -215,7 +256,7 @@ export default async function ProfilePage({ searchParams }: PageProps<"/">) {
             <section id="about" className={`${panel} grid scroll-mt-20 items-center gap-12 md:grid-cols-2`}>
               <div className="grid grid-cols-2 items-start gap-4">
                 <Photo src={photo} pos={photoPos} className="aspect-[3/4] w-full" />
-                <Photo src={aboutSecond || hero} pos={aboutSecond ? aboutWork?.coverPos : heroPos} hint="프로젝트 표지나 배경 사진이 여기 보입니다" className="mt-16 aspect-square w-full p-4 text-center" />
+                <SnsCard sns={p.sns} />
               </div>
               <div className="space-y-6 md:text-right">
                 <h2 className="text-2xl font-normal tracking-[0.2em]">About me :</h2>
