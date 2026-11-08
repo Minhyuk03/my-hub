@@ -24,6 +24,8 @@ async function runOpen(id: number, mode: "reveal" | "default" | "editor"): Promi
   else {
     const app = getSettings(db).editorByExt[r.item.item.ext];
     if (!app) return { ok: false, message: `.${r.item.item.ext} 형식의 편집기가 설정되지 않았습니다. 설정에서 지정하세요.` };
+    // 설정은 다른 기기에서도 바꿀 수 있으므로, 앱 이름만 받는다 (경로·옵션처럼 보이는 값으로 아무 프로그램이나 열지 않게)
+    if (!/^[^/\\-][^/\\]*$/.test(app)) return { ok: false, message: "편집기는 앱 이름(예: Visual Studio Code)으로만 지정할 수 있습니다." };
     args = ["-a", app, r.path];
   }
   return new Promise((resolve) =>

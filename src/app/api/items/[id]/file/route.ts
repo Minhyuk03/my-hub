@@ -81,7 +81,8 @@ async function driveFile(id: number, download: boolean): Promise<Response | null
     const r = await d.download(meta);
     const exported = !!EXPORTS[meta.mimeType];
     const name = exported ? `${meta.name}.pdf` : meta.name;
-    const type = exported ? "application/pdf" : (MIME[it.item.ext] ?? r.headers.get("content-type") ?? "application/octet-stream");
+    // Drive 가 알려 주는 형식(text/html 등)은 믿지 않는다: 허브 주소에서 HTML 이 실행되지 않게 아는 형식만 화면에 연다
+    const type = exported ? "application/pdf" : (MIME[it.item.ext] ?? "application/octet-stream");
     const headers: Record<string, string> = {
       "Content-Type": download ? "application/octet-stream" : type,
       "Content-Disposition": contentDisposition(download ? "attachment" : "inline", name),

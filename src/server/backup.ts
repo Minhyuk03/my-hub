@@ -59,9 +59,13 @@ export function createBackup(db: Db, dir: string, env: BackupEnv) {
   const now = env.now();
   const onDisk = backupDirAvailable(dir, env);
   const target = path.join(onDisk ? dir : env.pendingDir, `hub-${stamp(now)}.db`);
-  fs.mkdirSync(path.dirname(target), { recursive: true });
+  fs.mkdirSync(path.dirname(target), { recursive: true, mode: 0o700 });
+  // 예전에 만든 백업 폴더도 나만 열 수 있게 (안의 예전 백업까지 함께 가려진다)
+  fs.chmodSync(path.dirname(target), 0o700);
   if (fs.existsSync(target)) fs.rmSync(target);
   db.$client.prepare(`VACUUM INTO ?`).run(target);
+  // 백업에는 모든 색인 내용이 들어 있으므로 나만 읽을 수 있게
+  fs.chmodSync(target, 0o600);
   const ok = verifyDbFile(target);
   if (!ok) {
     fs.rmSync(target, { force: true });
@@ -75,13 +79,14 @@ export function createBackup(db: Db, dir: string, env: BackupEnv) {
 /** 임시 보관 중인 백업을 외장 디스크로 옮긴다 */
 export function flushPending(db: Db, dir: string, env: BackupEnv): number {
   if (!backupDirAvailable(dir, env) || !fs.existsSync(env.pendingDir)) return 0;
-  fs.mkdirSync(dir, { recursive: true });
+  fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
   let n = 0;
   for (const name of fs.readdirSync(env.pendingDir)) {
     if (!NAME_RE.test(name)) continue;
     const from = path.join(env.pendingDir, name);
     const to = path.join(dir, name);
     fs.copyFileSync(from, to);
+    fs.chmodSync(to, 0o600);
     if (!verifyDbFile(to)) {
       fs.rmSync(to, { force: true });
       continue;

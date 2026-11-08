@@ -42,7 +42,7 @@ export function decide(listener: Listener, headers: Record<string, string | stri
     if (!cfg.requireLocalPasscode || !cfg.passcodeHash) return { action: "allow" };
     if (path === "/unlock") return { action: "unlock", login: LOCAL_LOGIN };
     const c = parseCookies(first(headers.cookie) ?? "")[LOCAL_SESSION_COOKIE];
-    if (c && verifySession(c, LOCAL_LOGIN, cfg.secret, now)) return { action: "allow", login: LOCAL_LOGIN };
+    if (c && verifySession(c, LOCAL_LOGIN, sessionKey(cfg), now)) return { action: "allow", login: LOCAL_LOGIN };
     return { action: "unlock", login: LOCAL_LOGIN };
   }
   const login = first(headers["tailscale-user-login"]);
@@ -52,7 +52,7 @@ export function decide(listener: Listener, headers: Record<string, string | stri
   if (!cfg.passcodeHash) return { action: "deny", status: 403, message: "앱 패스코드가 설정되지 않았습니다. Mac mini의 설정 화면에서 먼저 설정하세요." };
   if (path === "/unlock") return { action: "unlock", login };
   const cookie = parseCookies(first(headers.cookie) ?? "")[SESSION_COOKIE];
-  if (cookie && verifySession(cookie, login, cfg.secret, now)) return { action: "allow", login };
+  if (cookie && verifySession(cookie, login, sessionKey(cfg), now)) return { action: "allow", login };
   return { action: "unlock", login };
 }
 
@@ -62,12 +62,34 @@ export function parseCookies(h: string): Record<string, string> {
   const out: Record<string, string> = {};
   for (const part of h.split(";")) {
     const i = part.indexOf("=");
-    if (i > 0) out[part.slice(0, i).trim()] = decodeURIComponent(part.slice(i + 1).trim());
+    if (i <= 0) continue;
+    // 깨진 %인코딩이 와도 서버가 멈추지 않게 (decodeURIComponent 는 예외를 던진다)
+    try {
+      out[part.slice(0, i).trim()] = decodeURIComponent(part.slice(i + 1).trim());
+    } catch {
+      /* 이 쿠키만 무시 */
+    }
   }
   return out;
 }
 
 // ---------- 세션 ----------
+/**
+ * 세션 서명 키 = 서버 비밀값 + 지금 패스코드(해시).
+ * 패스코드를 바꾸면 키가 바뀌어, 그 전에 받은 세션(다른 기기·잃어버린 폰 포함)이 모두 풀린다.
+ */
+export function sessionKey(cfg: Pick<AuthConfig, "secret" | "passcodeHash">): string {
+  return `${cfg.secret}|${cfg.passcodeHash}`;
+}
+
+/**
+ * 잠금 해제 뒤 돌아갈 주소: 이 사이트 안의 경로만. "//evil.com", "/\evil.com"(브라우저가 // 로 읽음)·제어 문자는 첫 화면으로
+ */
+export function safeNextPath(next: string | null | undefined): string {
+  const n = next ?? "/";
+  if (!n.startsWith("/") || n.startsWith("//") || /[\\\u0000-\u001f\u007f]/.test(n)) return "/";
+  return n;
+}
 function sign(data: string, secret: string) {
   return crypto.createHmac("sha256", secret).update(data).digest("base64url");
 }
@@ -94,9 +116,11 @@ export function sessionCookie(token: string, listener: Listener = "tailscale") {
  * 모든 응답에 붙이는 보안 헤더. 페이지의 CSP(nonce)는 src/proxy.ts 에서 따로 붙인다.
  * 원본 파일 보기(/api/items/:id/file)는 허브 안의 미리보기(iframe)에서만 열리게 한다 (SVG 는 파일 경로가 sandbox CSP 를 따로 붙임).
  */
-export function securityHeaders(pathname: string): Record<string, string> {
+export function securityHeaders(pathname: string, listener: Listener = "local"): Record<string, string> {
   const file = /^\/api\/items\/\d+\/file$/.test(pathname);
   return {
+    // https(Tailscale) 로 들어온 경우: 브라우저가 앞으로 이 주소를 http 로 열지 않게
+    ...(listener === "tailscale" ? { "Strict-Transport-Security": "max-age=31536000" } : {}),
     "X-Content-Type-Options": "nosniff",
     "Referrer-Policy": "same-origin",
     "X-Frame-Options": file ? "SAMEORIGIN" : "DENY",

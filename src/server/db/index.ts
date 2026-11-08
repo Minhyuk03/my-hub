@@ -14,7 +14,9 @@ const MIGRATIONS = path.join(process.env.HUB_ROOT ?? process.cwd(), "drizzle");
 
 /** DB를 열고 마이그레이션을 적용한다. 테스트에서는 임시 파일 경로를 넘긴다. */
 export function openDb(file: string = DB_FILE, opts: { migrate?: boolean } = {}): Db {
-  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
+  // 앱 데이터 폴더(DB·업로드·키)는 나만 열 수 있게: 이 Mac 의 다른 사용자 계정이 hub.db 를 직접 읽지 못하도록
+  if (path.dirname(file) === DATA_DIR) fs.chmodSync(DATA_DIR, 0o700);
   const sqlite = new Database(file);
   sqlite.pragma("journal_mode = WAL");
   sqlite.pragma("synchronous = NORMAL");

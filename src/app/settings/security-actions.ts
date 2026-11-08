@@ -26,10 +26,10 @@ export async function savePasscode(_: unknown, form: FormData): Promise<{ ok: bo
   await assertLocal();
   const a = String(form.get("passcode") ?? "");
   const b = String(form.get("confirm") ?? "");
-  if (a.length < 6) return { ok: false, message: "6자 이상 입력하세요." };
+  if (a.length < 8) return { ok: false, message: "8자 이상 입력하세요." };
   if (a !== b) return { ok: false, message: "두 번 입력한 값이 다릅니다." };
   setSetting(getDb(), "passcodeHash", hashPasscode(a));
-  return { ok: true, message: "패스코드를 저장했습니다. 다른 기기는 다음 접속 때 한 번 입력합니다." };
+  return { ok: true, message: "패스코드를 저장했습니다. 이전 패스코드로 들어와 있던 기기는 모두 잠기고, 다음 접속 때 새 패스코드를 입력합니다." };
 }
 
 /** Mac mini 본인 접속에도 패스코드 요구 (패스코드가 있어야 켤 수 있다) */

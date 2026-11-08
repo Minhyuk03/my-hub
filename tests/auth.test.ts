@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { AttemptLimiter, createSession, decide, hashPasscode, LISTENER_HEADER, LOCAL_LOGIN, LOCAL_SESSION_COOKIE, pageCsp, sanitizeHeaders, securityHeaders, SESSION_COOKIE, verifyPasscode, verifySession } from "@/server/http/auth";
+import { AttemptLimiter, createSession, decide, hashPasscode, LISTENER_HEADER, LOCAL_LOGIN, LOCAL_SESSION_COOKIE, pageCsp, parseCookies, safeNextPath, sanitizeHeaders, securityHeaders, SESSION_COOKIE, sessionKey, verifyPasscode, verifySession } from "@/server/http/auth";
 import { isAllowedHost, isLocalRequest, tailscaleHost } from "@/server/http/local";
 
 process.env.HUB_TAILSCALE_HOST = "myhub.talpa-nunki.ts.net";
@@ -8,7 +8,7 @@ const TAILSCALE_HOST = tailscaleHost();
 const ME = "me@example.com";
 const secret = "test-secret";
 const cfg = { allowedLogins: [ME], passcodeHash: hashPasscode("1234"), secret };
-const cookie = (login = ME, now = Date.now()) => `${SESSION_COOKIE}=${encodeURIComponent(createSession(login, secret, now))}`;
+const cookie = (login = ME, now = Date.now()) => `${SESSION_COOKIE}=${encodeURIComponent(createSession(login, sessionKey(cfg), now))}`;
 
 describe("접속·인증 (7장)", () => {
   it("3000(본인)으로 온 요청의 Tailscale 헤더와 listener 헤더는 지운다", () => {
@@ -78,7 +78,7 @@ describe("접속·인증 (7장)", () => {
 
 describe("Mac mini 본인 접속 패스코드 (선택)", () => {
   const strict = { ...cfg, requireLocalPasscode: true };
-  const local = (now = Date.now()) => `${LOCAL_SESSION_COOKIE}=${encodeURIComponent(createSession(LOCAL_LOGIN, secret, now))}`;
+  const local = (now = Date.now()) => `${LOCAL_SESSION_COOKIE}=${encodeURIComponent(createSession(LOCAL_LOGIN, sessionKey(cfg), now))}`;
   it("켜면 127.0.0.1 접속도 패스코드 세션이 있어야 한다", () => {
     expect(decide("local", {}, "/", cfg).action).toBe("allow");
     expect(decide("local", {}, "/", strict)).toMatchObject({ action: "unlock", login: LOCAL_LOGIN });
@@ -105,5 +105,33 @@ describe("보안 헤더", () => {
     expect(c).toMatch("frame-ancestors 'none'");
     expect(c).toMatch("object-src 'none'");
     expect(c).not.toMatch("unsafe-eval");
+  });
+});
+
+describe("세션·입력 방어", () => {
+  it("패스코드를 바꾸면 이전 세션은 모두 풀린다", () => {
+    const h = { "tailscale-user-login": ME, cookie: cookie() };
+    expect(decide("tailscale", h, "/", cfg).action).toBe("allow");
+    expect(decide("tailscale", h, "/", { ...cfg, passcodeHash: hashPasscode("new-passcode") }).action).toBe("unlock");
+    // 서버 비밀값만으로 만든 예전 형식 세션도 통과하지 못한다
+    const old = `${SESSION_COOKIE}=${encodeURIComponent(createSession(ME, secret))}`;
+    expect(decide("tailscale", { "tailscale-user-login": ME, cookie: old }, "/", cfg).action).toBe("unlock");
+  });
+
+  it("깨진 쿠키 값은 무시하고 예외를 던지지 않는다 (서버가 멈추지 않게)", () => {
+    expect(() => parseCookies("a=%E0%A4%A; b=ok")).not.toThrow();
+    expect(parseCookies("a=%E0%A4%A; b=ok")).toEqual({ b: "ok" });
+    expect(() => decide("tailscale", { "tailscale-user-login": ME, cookie: `${SESSION_COOKIE}=%ZZ` }, "/", cfg)).not.toThrow();
+  });
+
+  it("잠금 해제 뒤 돌아갈 주소는 이 사이트 안의 경로만", () => {
+    expect(safeNextPath("/hub?f=1")).toBe("/hub?f=1");
+    expect(safeNextPath(null)).toBe("/");
+    for (const bad of ["//evil.com", "/\\evil.com", "/\\/evil.com", "https://evil.com", "evil.com", "/a\nb", "/\tevil"]) expect(safeNextPath(bad)).toBe("/");
+  });
+
+  it("https(Tailscale) 접속에는 HSTS 를 붙인다", () => {
+    expect(securityHeaders("/", "tailscale")["Strict-Transport-Security"]).toBeTruthy();
+    expect(securityHeaders("/", "local")["Strict-Transport-Security"]).toBeUndefined();
   });
 });

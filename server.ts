@@ -12,7 +12,7 @@ import crypto from "node:crypto";
 import next from "next";
 import { DATA_DIR } from "@/lib/config";
 import { openDb } from "@/server/db";
-import { AttemptLimiter, createSession, decide, sanitizeHeaders, securityHeaders, sessionCookie, verifyPasscode, type AuthConfig, type Listener } from "@/server/http/auth";
+import { AttemptLimiter, createSession, decide, safeNextPath, sanitizeHeaders, securityHeaders, sessionCookie, sessionKey, verifyPasscode, type AuthConfig, type Listener } from "@/server/http/auth";
 import { tailscaleHost } from "@/server/http/local";
 import { tailscaleSelf } from "@/server/http/tailscale";
 import { getSettings } from "@/server/settings";
@@ -104,44 +104,53 @@ async function main() {
   await app.prepare();
 
   const make = (listener: Listener) =>
-    http.createServer(async (req, res) => {
-      sanitizeHeaders(req.headers, listener);
-      const url = new URL(req.url ?? "/", "http://x");
-      for (const [k, v] of Object.entries(securityHeaders(url.pathname))) res.setHeader(k, v);
-      const d = decide(listener, req.headers, url.pathname, authConfig());
-      if (d.action === "deny") {
-        res.writeHead(d.status, { "Content-Type": "text/plain; charset=utf-8" });
-        res.end(d.message);
-        return;
-      }
-      if (d.action === "unlock") {
-        if (url.pathname === "/unlock" && req.method === "POST") {
-          const origin = req.headers.origin;
-          const okOrigins = listener === "local" ? [`http://127.0.0.1:${LOCAL_PORT}`, `http://localhost:${LOCAL_PORT}`] : [`https://${tailscaleHost()}`];
-          if (origin && !okOrigins.includes(origin)) {
-            res.writeHead(403).end();
-            return;
-          }
-          if (limiter.locked(d.login)) return unlockPage(res, "여러 번 틀려서 10분 동안 잠겼습니다.");
-          if (listener === "local" && !origin) {
-            res.writeHead(403).end();
-            return;
-          }
-          const form = new URLSearchParams(await readBody(req).catch(() => ""));
-          const nextPath = (form.get("next") ?? "/").startsWith("/") ? (form.get("next") ?? "/") : "/";
-          if (!verifyPasscode(form.get("passcode") ?? "", authConfig().passcodeHash)) {
-            limiter.fail(d.login);
-            return unlockPage(res, "패스코드가 맞지 않습니다.", nextPath);
-          }
-          limiter.success(d.login);
-          res.writeHead(303, { "Set-Cookie": sessionCookie(createSession(d.login, secret), listener), Location: nextPath.startsWith("//") ? "/" : nextPath });
-          res.end();
+    http.createServer((req, res) => {
+      // 요청 하나에서 난 오류로 서버 전체가 멈추지 않게 한다 (처리 안 된 Promise 오류는 Node 를 종료시킨다)
+      route(listener, req, res).catch((e) => {
+        console.error("> 요청 처리 오류:", (e as Error).message);
+        if (!res.headersSent) res.writeHead(500, { "Content-Type": "text/plain; charset=utf-8" });
+        res.end("서버 오류");
+      });
+    });
+
+  async function route(listener: Listener, req: http.IncomingMessage, res: http.ServerResponse) {
+    sanitizeHeaders(req.headers, listener);
+    const url = new URL(req.url ?? "/", "http://x");
+    for (const [k, v] of Object.entries(securityHeaders(url.pathname, listener))) res.setHeader(k, v);
+    const d = decide(listener, req.headers, url.pathname, authConfig());
+    if (d.action === "deny") {
+      res.writeHead(d.status, { "Content-Type": "text/plain; charset=utf-8" });
+      res.end(d.message);
+      return;
+    }
+    if (d.action === "unlock") {
+      if (url.pathname === "/unlock" && req.method === "POST") {
+        const origin = req.headers.origin;
+        const okOrigins = listener === "local" ? [`http://127.0.0.1:${LOCAL_PORT}`, `http://localhost:${LOCAL_PORT}`] : [`https://${tailscaleHost()}`];
+        if (origin && !okOrigins.includes(origin)) {
+          res.writeHead(403).end();
           return;
         }
-        return unlockPage(res, "", url.pathname === "/unlock" ? "/" : url.pathname + url.search);
+        if (limiter.locked(d.login)) return unlockPage(res, "여러 번 틀려서 10분 동안 잠겼습니다.");
+        if (listener === "local" && !origin) {
+          res.writeHead(403).end();
+          return;
+        }
+        const form = new URLSearchParams(await readBody(req).catch(() => ""));
+        const nextPath = safeNextPath(form.get("next"));
+        if (!verifyPasscode(form.get("passcode") ?? "", authConfig().passcodeHash)) {
+          limiter.fail(d.login);
+          return unlockPage(res, "패스코드가 맞지 않습니다.", nextPath);
+        }
+        limiter.success(d.login);
+        res.writeHead(303, { "Set-Cookie": sessionCookie(createSession(d.login, sessionKey(authConfig())), listener), Location: nextPath });
+        res.end();
+        return;
       }
-      handle(req, res);
-    });
+      return unlockPage(res, "", url.pathname === "/unlock" ? "/" : url.pathname + url.search);
+    }
+    await handle(req, res);
+  }
 
   make("local").listen(LOCAL_PORT, "127.0.0.1", () => console.log(`> 본인 접속: http://127.0.0.1:${LOCAL_PORT} (${dev ? "개발" : "운영"} 모드)`));
   make("tailscale").listen(TS_PORT, "127.0.0.1", () => console.log(`> Tailscale 전용: 127.0.0.1:${TS_PORT} → https://${tailscaleHost() || "(Tailscale 주소를 아직 모름)"}`));
