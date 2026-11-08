@@ -73,41 +73,37 @@ function shortUrl(url: string) {
   return url.replace(/^(https?:\/\/)?(www\.)?/i, "").replace(/\/+$/, "");
 }
 
-/** About 사진 옆 SNS 칸 (사진 한 장과 엇갈리게 아래로 내려 놓는다) */
-function SnsCard({ sns }: { sns: Profile["sns"] }) {
+/** SNS 카드 목록: 첫 글자 동그라미 · 이름 · 짧은 주소 · ↗ (누르면 새 탭) */
+function SnsList({ sns }: { sns: Profile["sns"] }) {
   return (
-    <div className="mt-16 space-y-4 border-t border-[var(--taupe)] pt-4">
-      <h3 className={`${label} text-[var(--taupe)]`}>Follow</h3>
-      {sns.length ? (
-        <ul className="space-y-3">
-          {sns.map((s, i) => {
-            const href = linkHref(s.url);
-            const body = (
-              <>
-                <span className="min-w-0">
-                  <span className="block text-sm font-normal">{s.title || shortUrl(s.url)}</span>
-                  <span className="block truncate text-xs text-muted-foreground">{s.desc || shortUrl(s.url)}</span>
-                </span>
-                {href && <ArrowUpRight className="size-3.5 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5 group-hover:text-foreground" />}
-              </>
-            );
-            return (
-              <li key={i}>
-                {href ? (
-                  <a href={href} target="_blank" rel="noreferrer" className="group flex items-start justify-between gap-2 border-b pb-3">
-                    {body}
-                  </a>
-                ) : (
-                  <div className="flex items-start justify-between gap-2 border-b pb-3">{body}</div>
-                )}
-              </li>
-            );
-          })}
-        </ul>
-      ) : (
-        <Empty to="sns">SNS 넣기</Empty>
-      )}
-    </div>
+    <ul className="grid gap-2">
+      {sns.map((s, i) => {
+        const href = linkHref(s.url);
+        const name = s.title || shortUrl(s.url);
+        const body = (
+          <>
+            <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-[var(--taupe)] text-xs font-normal text-white uppercase">{name.slice(0, 1)}</span>
+            <span className="min-w-0 flex-1">
+              <span className="block text-sm font-normal">{name}</span>
+              <span className="block truncate text-xs text-muted-foreground">{s.desc || shortUrl(s.url)}</span>
+            </span>
+            {href && <ArrowUpRight className="size-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5 group-hover:text-foreground" />}
+          </>
+        );
+        const box = "flex items-center gap-3 rounded-sm border bg-background/60 px-3 py-2.5";
+        return (
+          <li key={i}>
+            {href ? (
+              <a href={href} target="_blank" rel="noreferrer" className={`group ${box} transition-colors hover:border-[var(--taupe)]`}>
+                {body}
+              </a>
+            ) : (
+              <div className={box}>{body}</div>
+            )}
+          </li>
+        );
+      })}
+    </ul>
   );
 }
 
@@ -252,26 +248,52 @@ export default async function ProfilePage({ searchParams }: PageProps<"/">) {
               </p>
             )}
 
-            {/* About: 왼쪽 엇갈린 사진 두 장, 오른쪽 정렬 글 */}
-            <section id="about" className={`${panel} grid scroll-mt-20 items-center gap-12 md:grid-cols-2`}>
-              <div className="grid grid-cols-2 items-start gap-4">
-                <Photo src={photo} pos={photoPos} className="aspect-[3/4] w-full" />
-                <SnsCard sns={p.sns} />
-              </div>
-              <div className="space-y-6 md:text-right">
-                <h2 className="text-2xl font-normal tracking-[0.2em]">About me :</h2>
-                {p.about ? (
-                  <p className="text-sm leading-7 whitespace-pre-wrap text-muted-foreground md:ml-auto md:max-w-[46ch]">{p.about}</p>
-                ) : (
-                  <Empty to="about">자기소개를 3~5문장으로 적어 주세요</Empty>
-                )}
-                <a href="#project" className={`${label} inline-block bg-[var(--taupe)] px-5 py-2.5 font-normal text-white hover:opacity-90`}>
-                  Project
-                </a>
+            {/* About: 가운데 제목, 왼쪽 사진 · 오른쪽 이름·소개·연락처·SNS (Profile·Project 와 같은 판) */}
+            <section className={`${panel} space-y-12`}>
+              <Title id="about" en="About me" ko="자기소개" />
+              <div className="grid items-center gap-10 md:grid-cols-[minmax(0,18rem)_minmax(0,1fr)] lg:gap-16">
+                <Photo src={photo} pos={photoPos} hint="프로필 사진 넣기" className="mx-auto aspect-[3/4] w-full max-w-72 shadow-lg md:mx-0" />
+                <div className="min-w-0 space-y-8">
+                  <div className="space-y-2">
+                    <p className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                      <span className="text-2xl font-normal">{p.name || "이름"}</span>
+                      {p.nameEn && <span className={`${label} text-muted-foreground`}>{p.nameEn}</span>}
+                    </p>
+                    {p.headline && <p className="text-sm text-[var(--taupe)]">{p.headline}</p>}
+                  </div>
+                  {p.about ? (
+                    <p className="max-w-[60ch] text-sm leading-7 whitespace-pre-wrap text-muted-foreground">{p.about}</p>
+                  ) : (
+                    <Empty to="about">자기소개를 3~5문장으로 적어 주세요</Empty>
+                  )}
+                  <div className="grid gap-x-10 gap-y-8 border-t pt-8 lg:grid-cols-2">
+                    <Block title="Contact" to="links" empty={!p.links.length}>
+                      <ul className="space-y-1.5 text-sm">
+                        {p.links.map((l, i) => {
+                          const href = linkHref(l.url);
+                          return (
+                            <li key={i} className="flex gap-2">
+                              {l.label && <span className="min-w-5 shrink-0 text-muted-foreground">{l.label}</span>}
+                              {href ? (
+                                <a href={href} className="min-w-0 [overflow-wrap:anywhere] hover:underline">
+                                  {l.url}
+                                </a>
+                              ) : (
+                                <span className="min-w-0 [overflow-wrap:anywhere]">{l.url}</span>
+                              )}
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    </Block>
+                    <Block title="Follow" to="sns" empty={!p.sns.length}>
+                      <SnsList sns={p.sns} />
+                    </Block>
+                  </div>
+                </div>
               </div>
             </section>
           </div>
-
 
           {/* Profile: 교육·경력·자격증 / 스킬·언어·경험 */}
           {/* Profile 화면 */}
