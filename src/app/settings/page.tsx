@@ -33,6 +33,7 @@ import { disconnectDrive, setDriveTestingMode } from "./drive-actions";
 import { driveEnv, driveExpiry } from "@/server/connectors/gdrive/client";
 import { saveAllowlist, setRequireLocalPasscode } from "./security-actions";
 import { headers } from "next/headers";
+import os from "node:os";
 import { isLocalRequest } from "@/server/http/local";
 import { tailscaleSelf, tailscaleServeStatus } from "@/server/http/tailscale";
 
@@ -80,6 +81,40 @@ function Connector({ id, name, on, state, desc, children }: { id: string; name: 
 }
 
 const area = "w-full rounded-sm border bg-background p-2 font-mono text-xs";
+
+/** 연결 방법 단계 안내. 연결이 안 되어 있거나 끊겼으면 펼쳐 둔다 */
+function HowTo({ title, open, children }: { title: string; open: boolean; children: React.ReactNode }) {
+  return (
+    <details open={open} className="rounded-sm border border-dashed px-4 py-3 text-xs">
+      <summary className="cursor-pointer select-none text-muted-foreground hover:text-foreground">{title}</summary>
+      <ol className="mt-3 list-decimal space-y-2 pl-4 leading-relaxed text-muted-foreground marker:text-primary [&_a]:text-foreground [&_a]:underline [&_b]:font-normal [&_b]:text-foreground [&_code]:rounded-sm [&_code]:bg-muted [&_code]:px-1 [&_code]:py-0.5 [&_code]:break-all [&_code]:text-foreground">
+        {children}
+      </ol>
+    </details>
+  );
+}
+
+/** 토큰을 .env.local 에 넣고 허브를 다시 시작하는 단계 (Notion·GitHub·Figma 공통) */
+function TokenSteps({ name, prefix, check }: { name: string; prefix: string; check: string }) {
+  const env = `${REPO}/.env.local`;
+  return (
+    <>
+      <li>
+        Mac mini 의 터미널에서 <code>open -e {env}</code> 를 실행해 설정 파일을 엽니다.
+      </li>
+      <li>
+        <code>{name}=</code> 줄의 <code>=</code> 뒤에 복사한 토큰(<code>{prefix}…</code>)을 붙여 넣고 저장합니다. 따옴표·띄어쓰기 없이 한 줄로 넣습니다.
+      </li>
+      <li>
+        터미널에서 <code>bash {REPO}/scripts/service/restart.sh</code> 로 허브를 다시 시작하고, 이 화면을 새로고침합니다. {check}
+      </li>
+    </>
+  );
+}
+
+/** 허브 폴더 (~ 로 줄여 보여 줌) */
+const REPO = process.cwd().replace(os.homedir(), "~");
+const LOCAL_SETTINGS = "http://127.0.0.1:3000/settings";
 
 export default async function SettingsPage({ searchParams }: PageProps<"/settings">) {
   await connection();
@@ -224,7 +259,7 @@ export default async function SettingsPage({ searchParams }: PageProps<"/setting
             </Section>
           )}
 
-          <Section id="connect" label="Connect" title="연결 서비스" desc="모두 읽기 전용입니다. 가져온 문서는 원본 서비스 화면으로 열립니다. 토큰은 .env.local 에 넣고 허브를 다시 시작합니다.">
+          <Section id="connect" label="Connect" title="연결 서비스" desc="모두 읽기 전용입니다. 가져온 문서는 원본 서비스 화면으로 열립니다. 칸마다 연결하는 방법을 순서대로 적어 두었고, 끊긴 칸은 펼쳐져 있습니다.">
             {typeof driveMsg === "string" && <p className="rounded-sm bg-muted px-3 py-2">{driveMsg}</p>}
             <div className="grid gap-4 lg:grid-cols-2">
               <Connector
@@ -236,42 +271,81 @@ export default async function SettingsPage({ searchParams }: PageProps<"/setting
               >
                 {!denv.configured ? (
                   <p className={err}>.env.local 에 GOOGLE_CLIENT_ID 와 GOOGLE_CLIENT_SECRET 이 필요합니다.</p>
-                ) : s.gdriveAccount ? (
+                ) : (
                   <>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span>
-                        계정: <b className="font-normal">{s.gdriveAccount.email}</b>
-                      </span>
-                      {local && (
-                        <a href="/api/gdrive/connect" className="text-sm underline">
-                          다시 연결
-                        </a>
-                      )}
-                      {local && (
-                        <form action={disconnectDrive}>
-                          <ConfirmSubmit message="Google Drive 연결을 해제할까요? 이미 가져온 색인은 남고, 새 변경은 반영되지 않습니다.">연결 해제</ConfirmSubmit>
-                        </form>
-                      )}
-                    </div>
+                    {s.gdriveAccount && (
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span>
+                          계정: <b className="font-normal">{s.gdriveAccount.email}</b>
+                        </span>
+                        {local && (
+                          <form action={disconnectDrive}>
+                            <ConfirmSubmit message="Google Drive 연결을 해제할까요? 이미 가져온 색인은 남고, 새 변경은 반영되지 않습니다.">연결 해제</ConfirmSubmit>
+                          </form>
+                        )}
+                      </div>
+                    )}
                     {dexp && (
                       <p className={dexp.soon ? "text-amber-600 dark:text-amber-400" : "text-muted-foreground"}>
-                        테스트 중인 Google 앱: {dexp.expired ? "연결이 만료되었습니다. 다시 연결하세요." : `${new Date(dexp.expiresAt).toLocaleDateString("ko-KR")}에 만료 (${dexp.leftDays}일 남음)`}
+                        테스트 중인 Google 앱: {dexp.expired ? "연결이 만료되었습니다. 아래 순서대로 다시 연결하세요." : `${new Date(dexp.expiresAt).toLocaleDateString("ko-KR")}에 만료 (${dexp.leftDays}일 남음)`}
                       </p>
                     )}
-                    <form action={setDriveTestingMode.bind(null, !s.gdriveTestingMode)} className="text-xs text-muted-foreground">
-                      {s.gdriveTestingMode ? "Google Cloud 에서 앱을 프로덕션으로 게시했다면 " : "앱이 다시 테스트 상태라면 "}
-                      <button type="submit" className="underline">
-                        {s.gdriveTestingMode ? "만료 알림 끄기" : "만료 알림 켜기"}
-                      </button>
-                    </form>
-                    <DrivePicker />
+                    {local ? (
+                      <a
+                        href="/api/gdrive/connect"
+                        className={`inline-flex h-8 items-center rounded-sm px-3 text-sm ${!s.gdriveAccount || dexp?.expired ? "bg-primary text-primary-foreground hover:opacity-90" : "border hover:bg-muted"}`}
+                      >
+                        {s.gdriveAccount ? "Google Drive 다시 연결" : "Google Drive 연결"}
+                      </a>
+                    ) : (
+                      <p className="rounded-sm bg-amber-500/10 px-3 py-2 text-amber-700 dark:text-amber-300">
+                        지금은 Tailscale 주소로 접속 중이라 여기서는 연결 버튼이 나오지 않습니다. Mac mini 에서 <b className="font-normal">{LOCAL_SETTINGS}#gdrive</b> 를 여세요.
+                      </p>
+                    )}
+                    <HowTo title={s.gdriveAccount ? "다시 연결하는 방법" : "연결하는 방법"} open={!s.gdriveAccount || !!dexp?.expired}>
+                      <li>
+                        {local ? (
+                          "지금 Mac mini 에서 직접 접속 중이라 이 화면에서 바로 연결할 수 있습니다."
+                        ) : (
+                          <>
+                            <b>Mac mini 앞에서</b> 브라우저로 <code>{LOCAL_SETTINGS}#gdrive</code> 를 엽니다. 휴대폰·노트북이나 Mac mini 에서도 Tailscale 주소(…ts.net)로는 연결할 수 없습니다. Google 이 연결을
+                            마친 뒤 이 Mac 의 127.0.0.1 주소로 돌려보내기 때문입니다.
+                          </>
+                        )}
+                      </li>
+                      <li>
+                        <b>{s.gdriveAccount ? "Google Drive 다시 연결" : "Google Drive 연결"}</b> 버튼을 누릅니다.
+                      </li>
+                      <li>Google 로그인 화면에서 {s.gdriveAccount ? <b>{s.gdriveAccount.email}</b> : "연결할"} 계정을 고릅니다.</li>
+                      <li>
+                        &ldquo;Google에서 확인하지 않은 앱&rdquo; 경고가 나오면 <b>고급</b> → <b>…(으)로 이동(안전하지 않음)</b>을 누릅니다. 직접 만든 테스트용 앱이라 나오는 경고입니다.
+                      </li>
+                      <li>
+                        &ldquo;Google Drive 파일 보기&rdquo; 권한 화면에서 <b>계속</b>을 누릅니다 (읽기 전용).
+                      </li>
+                      <li>
+                        허브 설정 화면으로 돌아와 이 칸 위에 결과 메시지가 뜨면 끝입니다. 끊겼던 Drive 폴더는 몇 분 안에 다시 동기화됩니다 (
+                        <Link href="/status">동기화 상태</Link>에서 확인).
+                      </li>
+                      {s.gdriveTestingMode && (
+                        <li>
+                          Google 앱이 &ldquo;테스트&rdquo; 상태라 연결이 7일마다 만료됩니다. Google Cloud Console → <b>OAuth 동의 화면</b>(Google Auth Platform → 대상) 에서 <b>앱 게시</b>로 프로덕션으로 바꾸면
+                          만료되지 않습니다.
+                        </li>
+                      )}
+                    </HowTo>
+                    {s.gdriveAccount && (
+                      <>
+                        <form action={setDriveTestingMode.bind(null, !s.gdriveTestingMode)} className="text-xs text-muted-foreground">
+                          {s.gdriveTestingMode ? "Google Cloud 에서 앱을 프로덕션으로 게시했다면 " : "앱이 다시 테스트 상태라면 "}
+                          <button type="submit" className="underline">
+                            {s.gdriveTestingMode ? "만료 알림 끄기" : "만료 알림 켜기"}
+                          </button>
+                        </form>
+                        <DrivePicker />
+                      </>
+                    )}
                   </>
-                ) : local ? (
-                  <a href="/api/gdrive/connect" className="inline-flex h-8 items-center rounded-sm bg-primary px-3 text-sm text-primary-foreground">
-                    Google Drive 연결
-                  </a>
-                ) : (
-                  <p className="text-muted-foreground">연결은 Mac mini에서 직접 접속해 진행하세요.</p>
                 )}
               </Connector>
 
@@ -282,8 +356,23 @@ export default async function SettingsPage({ searchParams }: PageProps<"/setting
                 state={!notionToken ? "토큰 없음" : notionSources.length ? `페이지 ${notionSources.length}개` : "가져올 페이지 없음"}
                 desc="내부 통합(읽기 전용)으로 연결합니다. 고른 페이지와 그 아래 하위 페이지·데이터베이스를 가져옵니다."
               >
+                <HowTo title="연결하는 방법" open={!notionToken}>
+                  <li>
+                    <a href="https://www.notion.so/profile/integrations" target="_blank" rel="noreferrer">
+                      Notion 통합 관리
+                    </a>
+                    에서 <b>새 통합</b>을 만듭니다. 종류는 <b>내부</b>, 기능은 <b>콘텐츠 읽기</b>만 켭니다.
+                  </li>
+                  <li>
+                    만든 통합의 <b>내부 통합 시크릿</b>을 복사합니다.
+                  </li>
+                  <TokenSteps name="NOTION_TOKEN" prefix="ntn_" check="통합 이름이 보이면 연결된 것입니다." />
+                  <li>
+                    Notion 에서 가져올 페이지의 <b>⋯ → 연결(Connections)</b> 에 이 통합을 추가하고, 아래 칸에 그 페이지 주소를 넣습니다.
+                  </li>
+                </HowTo>
                 {!notionToken ? (
-                  <p className={err}>.env.local 에 NOTION_TOKEN 이 필요합니다. (넣은 뒤 허브를 다시 시작)</p>
+                  <p className={err}>.env.local 에 NOTION_TOKEN 이 없습니다.</p>
                 ) : (
                   <>
                     <p>{notionWho}</p>
@@ -306,7 +395,7 @@ export default async function SettingsPage({ searchParams }: PageProps<"/setting
                 desc="내가 소유한 저장소의 README·최근 커밋·이슈·PR 을 가져옵니다."
               >
                 {!githubToken ? (
-                  <p className={err}>.env.local 에 GITHUB_TOKEN 이 필요합니다. (넣은 뒤 허브를 다시 시작)</p>
+                  <p className={err}>.env.local 에 GITHUB_TOKEN 이 없습니다.</p>
                 ) : (
                   <>
                     <p className={ghWho?.ok ? "" : err}>{ghWho?.ok ? `토큰 계정: ${ghWho.message}` : ghWho?.message}</p>
@@ -318,6 +407,27 @@ export default async function SettingsPage({ searchParams }: PageProps<"/setting
                     {ghWho?.ok && !githubSources.length && <GitHubImportForm />}
                   </>
                 )}
+                <HowTo title={githubToken ? "토큰을 새로 넣는 방법" : "연결하는 방법"} open={!githubToken || !ghWho?.ok}>
+                  <li>
+                    <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noreferrer">
+                      GitHub 새 토큰 만들기
+                    </a>
+                    를 엽니다 (GitHub → Settings → Developer settings → Personal access tokens → <b>Fine-grained tokens</b> → Generate new token).
+                  </li>
+                  <li>
+                    Token name 은 <b>my-hub</b>, Expiration 은 원하는 기간으로 정합니다. 기간이 지나면 이 과정을 다시 합니다.
+                  </li>
+                  <li>
+                    Repository access 는 <b>All repositories</b>를 고릅니다.
+                  </li>
+                  <li>
+                    Permissions 에서 <b>Contents · Issues · Pull requests</b> 를 <b>Read-only</b> 로 추가합니다 (Metadata 는 자동으로 Read-only).
+                  </li>
+                  <li>
+                    <b>Generate token</b> 을 누르고 나온 토큰을 복사합니다. 이 화면을 벗어나면 다시 볼 수 없습니다.
+                  </li>
+                  <TokenSteps name="GITHUB_TOKEN" prefix="github_pat_" check="“토큰 계정: …” 이 보이면 끝이고, 끊겼던 저장소는 다음 동기화 때 다시 가져옵니다." />
+                </HowTo>
               </Connector>
 
               <Connector
@@ -328,7 +438,7 @@ export default async function SettingsPage({ searchParams }: PageProps<"/setting
                 desc={<>Figma 는 &ldquo;내 파일 전체 목록&rdquo;을 주지 않아 팀·프로젝트 주소를 등록합니다. 기본은 파일 이름·수정 시각·미리보기 이미지만 가져옵니다.</>}
               >
                 {!figmaToken ? (
-                  <p className={err}>.env.local 에 FIGMA_TOKEN 이 필요합니다. (넣은 뒤 허브를 다시 시작)</p>
+                  <p className={err}>.env.local 에 FIGMA_TOKEN 이 없습니다.</p>
                 ) : (
                   <>
                     <p className={fgWho?.ok ? "" : err}>{fgWho?.ok ? `토큰 계정: ${fgWho.message}` : fgWho?.message}</p>
@@ -348,6 +458,15 @@ export default async function SettingsPage({ searchParams }: PageProps<"/setting
                     <FigmaTargetForm />
                   </>
                 )}
+                <HowTo title={figmaToken ? "토큰을 새로 넣는 방법" : "연결하는 방법"} open={!figmaToken || !fgWho?.ok}>
+                  <li>
+                    Figma 왼쪽 위 계정 메뉴 → <b>Settings → Security → Personal access tokens</b> → <b>Generate new token</b>.
+                  </li>
+                  <li>
+                    권한은 <b>File content</b> 와 <b>Projects</b> 를 <b>Read-only</b> 로 정하고, 나온 토큰을 복사합니다.
+                  </li>
+                  <TokenSteps name="FIGMA_TOKEN" prefix="figd_" check="“토큰 계정: …” 이 보이면 아래 칸에 팀이나 프로젝트 주소를 넣습니다." />
+                </HowTo>
               </Connector>
             </div>
           </Section>
