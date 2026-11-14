@@ -1,6 +1,6 @@
 /**
  * 로컬 Ollama (http://127.0.0.1:11434) 호출. 이 Mac 안에서만 실행되며 외부로 아무것도 보내지 않는다.
- * 모델 파일은 외장 디스크(/Volumes/Disk/ollama/models)에 있으므로, 디스크가 없으면 "모델 없음"이 된다.
+ * 모델 파일은 외장 SSD(/Volumes/Dev/ollama/models)에 있으므로, 디스크가 없으면 "모델 없음"이 된다.
  */
 export type OllamaDeps = { fetch: typeof fetch; baseUrl: string };
 export const realOllama = (): OllamaDeps => ({ fetch, baseUrl: process.env.OLLAMA_URL ?? "http://127.0.0.1:11434" });

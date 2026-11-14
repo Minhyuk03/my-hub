@@ -15,14 +15,14 @@ export const PATHS = {
   obsidianVault: path.join(HOME, "Library/Mobile Documents/iCloud~md~obsidian/Documents"),
   icloudDrive: path.join(HOME, "Library/Mobile Documents/com~apple~CloudDocs"),
   claudeProjects: path.join(HOME, ".claude/projects"),
-  externalVolumes: ["/Volumes/Disk", "/Volumes/File"],
-  backupDir: "/Volumes/Disk/hub-backups",
+  externalVolumes: ["/Volumes/Dev", "/Volumes/Media", "/Volumes/Backup"],
+  backupDir: "/Volumes/Backup/hub-backups",
 } as const;
 
 /** 인덱싱할 폴더는 처음엔 비워 두고 설정 화면에서 추가한다. */
 export const DEFAULT_INDEXED_FOLDERS: string[] = [];
 
-export const DEFAULT_EXCLUDED_FOLDERS = ["/Volumes/Disk/Nikon", PATHS.backupDir, "/Volumes/Disk/ollama"];
+export const DEFAULT_EXCLUDED_FOLDERS = ["/Volumes/Media/Nikon", PATHS.backupDir, "/Volumes/Dev/ollama", "/Volumes/Dev/VM"];
 
 /** 인덱싱하지 않을 볼륨 (이름 패턴). 백업·설치 이미지 볼륨. */
 export const EXCLUDED_VOLUME_PATTERNS = [
