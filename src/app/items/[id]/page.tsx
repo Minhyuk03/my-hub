@@ -27,6 +27,7 @@ import { enqueue } from "@/server/sources/manage";
 import { getSettings } from "@/server/settings";
 import { LocalOpenButtons } from "./open-buttons";
 import { PolicyToggle } from "@/components/policy-toggle";
+import { HideSensitiveButton } from "@/components/hide-sensitive-button";
 import { explain, isDirectlyDenied, reasonLabel } from "@/server/chat/policy";
 import { AutoRefresh } from "@/app/status/auto-refresh";
 import { RememberVisit } from "@/components/remember-visit";
@@ -209,6 +210,7 @@ export default async function ItemPage({ params, searchParams }: PageProps<"/ite
             이 문서로 AI 에게 묻기
           </a>
         )}
+        <HideSensitiveButton kind="item" id={item.id} />
       </div>
 
       <ItemProjects itemId={item.id} memberOf={memberOf} projects={allProjects} />

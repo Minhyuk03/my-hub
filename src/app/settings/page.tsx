@@ -11,6 +11,7 @@ import { sourcesWithStats } from "@/server/queries";
 import { getSettings } from "@/server/settings";
 import { removeSourceAction, saveSettings, shortcuts } from "./actions";
 import { ConfirmSubmit } from "./confirm-submit";
+import { unhideSensitiveAction } from "./sensitive-actions";
 import { PolicyToggle } from "@/components/policy-toggle";
 import { denyList } from "@/server/chat/policy";
 import { hasKey } from "@/server/chat/llm";
@@ -155,6 +156,7 @@ export default async function SettingsPage({ searchParams }: PageProps<"/setting
     ["calendar", "Calendar", "일정"],
     ["chat", "AI Chat", "AI 채팅"],
     ["portfolio", "Portfolio", "첫 화면"],
+    ["sensitive", "Sensitive", "민감 정보"],
     ["rules", "Rules", "제외 규칙과 동작"],
   ];
   const err = "text-destructive";
@@ -643,6 +645,28 @@ export default async function SettingsPage({ searchParams }: PageProps<"/setting
                 </Link>
               ))}
             </div>
+          </Section>
+
+          <Section
+            id="sensitive"
+            label="Sensitive"
+            title="민감 정보로 숨긴 곳"
+            desc="폴더·항목 화면의 🙈 버튼으로 지정합니다. 숨긴 곳은 색인하지 않아 목록·검색·그래프·홈·AI 어디에도 나오지 않고, 그 자료를 인용한 AI 답변도 지웁니다. 실제 파일은 그대로이고, 다시 보이게 하면 다음 스캔에서 새로 색인합니다."
+          >
+            {s.sensitivePaths.length ? (
+              <ul className="divide-y rounded-sm border bg-card">
+                {s.sensitivePaths.map((p) => (
+                  <li key={p} className="flex items-center gap-3 px-4 py-2">
+                    <span className="min-w-0 flex-1 break-all text-sm">{shortPath(p)}</span>
+                    <form action={unhideSensitiveAction.bind(null, p)}>
+                      <ConfirmSubmit message={`${shortPath(p)} 을(를) 다시 보이게 할까요? 다음 스캔에서 검색·AI 에 다시 들어갑니다.`}>다시 보이기</ConfirmSubmit>
+                    </form>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-xs text-muted-foreground">숨긴 곳이 없습니다.</p>
+            )}
           </Section>
 
           <Section id="rules" label="Rules" title="제외 규칙과 동작" desc="숨김 파일·폴더(이름이 .으로 시작)는 항상 제외합니다. 백업 폴더도 자동으로 제외합니다.">

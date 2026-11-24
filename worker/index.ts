@@ -13,7 +13,7 @@ import { applyRetention, createBackup, flushPending, listBackups, PENDING_DIR, r
 import { runEnvCheck } from "@/lib/env-check";
 import { openDb } from "@/server/db";
 import { backups, commands, runtime, scanJobs, sources } from "@/server/db/schema";
-import { getSettings } from "@/server/settings";
+import { excludedPaths, getSettings } from "@/server/settings";
 import { checkAvailability } from "@/server/sources/availability";
 import { refreshSuggestions } from "@/server/projects/suggest";
 import { seedDefaultSources } from "@/server/sources/manage";
@@ -180,7 +180,7 @@ function startWatcher(src: typeof sources.$inferSelect) {
     const rel = p.slice(src.rootPath.length + 1).split("/");
     return (
       rel.some((seg) => isExcludedName(seg, settings.excludedPatterns)) ||
-      isExcludedFolder(p, settings.excludedFolders) ||
+      isExcludedFolder(p, excludedPaths(settings)) ||
       nested.some((n) => isInside(p, n)) ||
       (skippedBySource(src.config, p) && path.extname(p) !== "")
     );

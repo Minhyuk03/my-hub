@@ -8,7 +8,7 @@ import { isMountPoint } from "@/lib/env-check";
 import { getDb } from "@/server/db";
 import { createSource, enqueue, previewNewSource, removeSource } from "@/server/sources/manage";
 import { checkNewFolder, normalizeUserPath, isExcludedFolder, isExcludedName, isExcludedVolume, isInside, volumeRootOf, type SourceCheck } from "@/server/sources/rules";
-import { getSettings, setSetting } from "@/server/settings";
+import { excludedPaths, getSettings, setSetting } from "@/server/settings";
 
 export type DirListing = {
   path: string;
@@ -54,7 +54,7 @@ export async function listDir(p: string): Promise<DirListing> {
     parent: real === "/" ? null : path.dirname(real),
     dirs: [],
     check,
-    canCreateHere: !!vr && !isExcludedVolume(real) && !isExcludedFolder(real, s.excludedFolders),
+    canCreateHere: !!vr && !isExcludedVolume(real) && !isExcludedFolder(real, excludedPaths(s)),
   };
   if (!browsable(real)) return { ...base, parent: null, error: "이 위치는 볼 수 없습니다." };
   try {
@@ -64,7 +64,7 @@ export async function listDir(p: string): Promise<DirListing> {
       .map((d) => ({ name: d.name.normalize("NFC"), path: path.join(real, d.name) }))
       .filter((d) => {
         try {
-          return fs.statSync(d.path).isDirectory() && !isExcludedFolder(d.path, s.excludedFolders) && !isExcludedVolume(d.path);
+          return fs.statSync(d.path).isDirectory() && !isExcludedFolder(d.path, excludedPaths(s)) && !isExcludedVolume(d.path);
         } catch {
           return false;
         }
@@ -93,12 +93,12 @@ export async function removeSourceAction(id: number) {
 }
 
 export async function previewNewFolder(parent: string, name: string) {
-  return checkNewFolder(parent, name, getSettings(getDb()).excludedFolders);
+  return checkNewFolder(parent, name, excludedPaths(getSettings(getDb())));
 }
 
 /** 확인을 받은 뒤에만 호출된다. 기존 폴더를 옮기거나 지우지 않는다. */
 export async function createFolderAction(parent: string, name: string, alsoAdd: boolean) {
-  const c = checkNewFolder(parent, name, getSettings(getDb()).excludedFolders);
+  const c = checkNewFolder(parent, name, excludedPaths(getSettings(getDb())));
   if (!c.ok) return { ok: false, message: c.error! };
   fs.mkdirSync(c.path!); // recursive 아님: 상위 폴더가 이미 있어야 한다
   if (alsoAdd) return addSourceAction(c.path!);

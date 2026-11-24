@@ -14,6 +14,7 @@ import { isLocalRequest } from "@/server/http/local";
 import { linkFolderToProject, pinFolder } from "./actions";
 import { FinderButton } from "./finder-button";
 import { PolicyToggle } from "@/components/policy-toggle";
+import { HideSensitiveButton } from "@/components/hide-sensitive-button";
 import { isDirectlyDenied } from "@/server/chat/policy";
 import { externalDeny } from "@/server/db/schema";
 import type { Db } from "@/server/db";
@@ -105,6 +106,7 @@ export default async function FolderPage({ params, searchParams }: PageProps<"/f
           </a>
         )}
         <PolicyToggle kind="folder" id={f.id} denied={isDirectlyDenied(db, "folder", f.id)} inherited={folderInherited(db, f, s)} />
+        {f.path !== s.rootPath && <HideSensitiveButton kind="folder" id={f.id} />}
         {!pinned && (
           <form action={pinFolder.bind(null, f.id)}>
             <Button type="submit" variant="outline" size="sm">

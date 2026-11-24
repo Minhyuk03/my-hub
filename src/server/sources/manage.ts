@@ -4,7 +4,7 @@ import { eq, sql } from "drizzle-orm";
 import { PATHS } from "@/lib/config";
 import type { Db } from "../db";
 import { commands, items, sources } from "../db/schema";
-import { getSettings } from "../settings";
+import { excludedPaths, getSettings } from "../settings";
 import { realMountEnv, type MountEnv } from "./availability";
 import { checkNewSource, type SourceCheck } from "./rules";
 
@@ -13,7 +13,7 @@ export function sourceRoots(db: Db) {
 }
 
 export function previewNewSource(db: Db, p: string): SourceCheck {
-  return checkNewSource(p, { existingRoots: sourceRoots(db), excludedFolders: getSettings(db).excludedFolders });
+  return checkNewSource(p, { existingRoots: sourceRoots(db), excludedFolders: excludedPaths(getSettings(db)) });
 }
 
 export function createSource(db: Db, p: string, mount: MountEnv = realMountEnv, name?: string) {

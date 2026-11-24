@@ -7,7 +7,7 @@ import { useEffect, useRef, useState } from "react";
 import { Highlighted, SourceIcon, StateBadge } from "@/components/hub-ui";
 import { relTime, shortPath } from "@/lib/format";
 import type { SearchHit } from "@/server/search/query";
-import { readVisits, type Visit } from "@/lib/recent-visits";
+import { keepVisits, readVisits, type Visit } from "@/lib/recent-visits";
 import { savedCategories } from "./category-filter";
 
 /** ⌘K 로 바로 갈 수 있는 화면 */
@@ -39,6 +39,8 @@ export function SearchPalette() {
   const [error, setError] = useState<string | null>(null);
   // 검색어가 없을 때 보여 줄 것: 이 브라우저에서 최근 연 항목, 최근 수정한 항목
   const [recent, setRecent] = useState<SearchHit[]>([]);
+  // 최근 연 항목: 서버에 아직 있는지 확인한 뒤에만 보여 준다 (숨긴 항목의 제목이 잠깐이라도 보이지 않게)
+  const [visits, setVisits] = useState<Visit[]>([]);
   const router = useRouter();
   const seq = useRef(0);
 
@@ -56,10 +58,22 @@ export function SearchPalette() {
 
   useEffect(() => {
     if (!open) return;
+    const saved = readVisits();
+    if (saved.length)
+      fetch(`/api/search?known=${saved.map((v) => v.id).join(",")}`)
+        .then((r) => (r.headers.get("content-type")?.includes("json") ? r.json() : null))
+        .then((r: { ids: number[] } | null) => {
+          if (!r) return;
+          const live = new Set(r.ids);
+          keepVisits(live);
+          setVisits(saved.filter((v) => live.has(v.id)));
+        })
+        .catch(() => {});
     fetch(`/api/search?recent=1&limit=6${catQuery()}`)
       .then((r) => (r.headers.get("content-type")?.includes("json") ? r.json() : null))
       .then((r: { hits: SearchHit[] } | null) => setRecent(r?.hits ?? []))
       .catch(() => setRecent([]));
+    return () => setVisits([]); // 닫을 때 비워 두어 다음에 열 때 확인 전 목록이 보이지 않게
   }, [open]);
 
   useEffect(() => {
@@ -98,8 +112,6 @@ export function SearchPalette() {
   const shown = q.trim() ? hits : [];
   const typed = q.trim().toLowerCase();
   const pages = typed ? PAGES.filter((p) => p.label.toLowerCase().includes(typed)) : PAGES;
-  // 창이 열려 있을 때만 읽는다 (작은 목록이라 렌더마다 읽어도 가볍다)
-  const visits: Visit[] = open ? readVisits() : [];
   const visitIds = new Set(visits.map((v) => v.id));
   const group = "px-2 pb-1 pt-2 text-xs font-medium text-muted-foreground [&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:pb-1";
   const pageItems = (

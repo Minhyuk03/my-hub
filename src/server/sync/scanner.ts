@@ -9,7 +9,7 @@ import { folders, itemErrors, itemLinks, items, itemTags, scanJobs, sources, tag
 import { extractText, isExtractable, kindOf } from "../extract";
 import { removeItemText, writeItemText } from "../search/index-writer";
 import { nfc } from "../search/text";
-import { getSettings, type Settings } from "../settings";
+import { excludedPaths, getSettings, type Settings } from "../settings";
 import { checkAvailability, realMountEnv, type MountEnv } from "../sources/availability";
 import { isExcludedFolder, isExcludedName, isInside, skippedBySource } from "../sources/rules";
 import { aliasAll, tagAliases } from "../tags";
@@ -135,7 +135,7 @@ export async function runScan(db: Db, sourceId: number, deps: ScanDeps, scopePat
       for (const ent of entries) {
         const p = path.join(dir, ent.name);
         if (isExcludedName(ent.name, settings.excludedPatterns)) continue;
-        if (isExcludedFolder(p, settings.excludedFolders)) continue;
+        if (isExcludedFolder(p, excludedPaths(settings))) continue;
         if (ent.isSymbolicLink()) continue;
         if (ent.isDirectory()) {
           if (nestedRoots.includes(p)) continue;
@@ -478,9 +478,14 @@ export async function reindexItems(db: Db, deps: ScanDeps, ids: number[]) {
   }
 }
 
+/** 민감 정보로 숨긴 자료를 근거로 한 AI 답변은 본문을 이 문구로 바꾼다 */
+export const SENSITIVE_ANSWER = "민감 정보로 숨긴 자료를 근거로 한 답이라 지웠습니다.";
+
 /**
  * 제외 폴더·제외 이름에 해당하는 항목을 색인에서 지운다 (실제 파일은 건드리지 않음).
  * 제외는 삭제가 아니므로 deleted 로 표시하지 않고 바로 뺀다. 프로젝트·즐겨찾기에 연결된 폴더 기록은 남긴다.
+ * 민감 정보로 숨긴 곳(settings.sensitivePaths)은 흔적도 남기지 않는다:
+ * 채팅 인용·그 인용을 쓴 AI 답변·정리 제안·프로젝트 연결·즐겨찾기·외부 금지 지정까지 지운다.
  */
 export function purgeExcluded(db: Db, settings: Settings = getSettings(db)): number {
   const srcList = db.select({ id: sources.id, root: sources.rootPath, config: sources.config }).from(sources).all();
@@ -488,7 +493,7 @@ export function purgeExcluded(db: Db, settings: Settings = getSettings(db)): num
   const srcConfig = new Map(srcList.map((s) => [s.id, s.config]));
   const excludedItem = (p: string, sourceId: number) => excluded(p, sourceId) || skippedBySource(srcConfig.get(sourceId), p);
   const excluded = (p: string, sourceId: number) => {
-    if (isExcludedFolder(p, settings.excludedFolders)) return true;
+    if (isExcludedFolder(p, excludedPaths(settings))) return true;
     const root = srcRoots.get(sourceId);
     if (!root || !isInside(p, root)) return false;
     return p
@@ -497,8 +502,15 @@ export function purgeExcluded(db: Db, settings: Settings = getSettings(db)): num
       .some((seg) => isExcludedName(seg.replace(/#[A-Za-z0-9_-]+$/, ""), settings.excludedPatterns));
   };
   const rows = db.select({ id: items.id, path: items.path, sourceId: items.sourceId }).from(items).all().filter((r) => excludedItem(r.path, r.sourceId));
+  const sensitive = (p: string) => isExcludedFolder(p, settings.sensitivePaths);
   db.transaction((tx) => {
     for (const r of rows) {
+      if (sensitive(r.path)) {
+        tx.run(sql`UPDATE chat_messages SET content = ${SENSITIVE_ANSWER} WHERE role = 'assistant' AND id IN (SELECT message_id FROM chat_citations WHERE item_id = ${r.id})`);
+        tx.run(sql`DELETE FROM chat_citations WHERE item_id = ${r.id}`);
+        tx.run(sql`DELETE FROM para_moves WHERE item_id = ${r.id}`);
+        tx.run(sql`DELETE FROM external_deny WHERE target_kind = 'item' AND target_id = ${r.id}`);
+      }
       removeItemText(db, r.id);
       for (const t of [itemTags, itemLinks, itemErrors]) tx.delete(t).where(eq(t.itemId, r.id)).run();
       tx.run(sql`DELETE FROM project_items WHERE item_id = ${r.id}`);
@@ -513,6 +525,15 @@ export function purgeExcluded(db: Db, settings: Settings = getSettings(db)): num
       .all()
       .filter((f) => excluded(f.path, f.sourceId));
     for (const f of fs_) {
+      if (sensitive(f.path)) {
+        tx.run(sql`DELETE FROM project_folders WHERE folder_id = ${f.id}`);
+        tx.run(sql`DELETE FROM shortcuts WHERE kind = 'folder' AND target = ${String(f.id)}`);
+        tx.run(sql`DELETE FROM para_moves WHERE folder_id = ${f.id}`);
+        tx.run(sql`DELETE FROM external_deny WHERE target_kind = 'folder' AND target_id = ${f.id}`);
+        tx.run(sql`DELETE FROM project_suggestions WHERE status = 'pending' AND EXISTS (SELECT 1 FROM json_each(folder_ids) WHERE value = ${f.id})`);
+        tx.delete(folders).where(eq(folders.id, f.id)).run();
+        continue;
+      }
       const used =
         tx.get<{ n: number }>(sql`SELECT (SELECT count(*) FROM project_folders WHERE folder_id = ${f.id}) + (SELECT count(*) FROM shortcuts WHERE kind = 'folder' AND target = ${String(f.id)}) AS n`)?.n ?? 0;
       if (!used) tx.delete(folders).where(eq(folders.id, f.id)).run();
