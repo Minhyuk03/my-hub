@@ -18,7 +18,7 @@ export function HubIcon({ size, rounded = true }: { size: number; rounded?: bool
         height: size,
         display: "flex",
         position: "relative",
-        background: "linear-gradient(135deg, #4f46e5 0%, #0ea5e9 100%)",
+        background: "#0a0a0a", // 사이트 기본 색(흰·검)에 맞춘 검은 바탕
         borderRadius: rounded ? size * 0.22 : 0,
       }}
     >
