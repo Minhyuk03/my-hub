@@ -17,6 +17,7 @@ import { denyList } from "@/server/chat/policy";
 import { hasKey } from "@/server/chat/llm";
 import { saveChatSettings } from "./chat-actions";
 import { saveTagAliases } from "./tag-actions";
+import { aliasLines } from "@/server/tags";
 import { connectCalendar, disconnectCalendar, refreshCalendar, saveCalendarHidden } from "./calendar-actions";
 import type { CalendarSnapshot } from "@/server/calendar";
 import { runtime } from "@/server/db/schema";
@@ -480,18 +481,16 @@ export default async function SettingsPage({ searchParams }: PageProps<"/setting
             desc={
               <>
                 비슷한 태그를 허브 안에서 하나로 봅니다 (검색·그래프·태그 목록). 원본 노트는 바꾸지 않습니다. 한 줄에 &ldquo;원래 태그 = 합칠 태그&rdquo;, 하위 태그도 함께 옮겨집니다
-                (수업/자료구조 → 학교/자료구조). 줄을 지우면 다음 다시 색인 때 원래 이름으로 돌아옵니다.
+                (수업/자료구조 → 학교/자료구조). &ldquo;태그 = (삭제)&rdquo; 는 태그를 없앱니다. 줄을 지우면 노트에 적힌 태그는 다음 다시 색인 때 돌아오지만, 직접 단·수락한 태그는 돌아오지 않습니다.
               </>
             }
           >
             <form action={saveTagAliases} className="space-y-2">
               <textarea
                 name="aliases"
-                rows={Math.max(3, Object.keys(s.tagAliases).length + 1)}
-                defaultValue={Object.entries(s.tagAliases)
-                  .map(([a, b]) => `${a} = ${b}`)
-                  .join("\n")}
-                placeholder={"수업 = 학교\n코드 = 개발"}
+                rows={Math.min(14, Math.max(3, Object.keys(s.tagAliases).length + 1))}
+                defaultValue={aliasLines(s.tagAliases)}
+                placeholder={"수업 = 학교\n코드 = 개발\n안쓰는태그 = (삭제)"}
                 className={area}
               />
               <Button type="submit" size="sm">
