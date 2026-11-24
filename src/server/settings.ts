@@ -9,6 +9,10 @@ import { settings } from "./db/schema";
 export const DEFAULT_SETTINGS = {
   excludedFolders: DEFAULT_EXCLUDED_FOLDERS as string[],
   excludedPatterns: DEFAULT_EXCLUDED_PATTERNS as string[],
+  /** 민감 정보로 숨긴 폴더·파일 경로. 색인에 넣지 않아 목록·검색·그래프·AI 어디에도 나오지 않는다 (src/server/sensitive.ts) */
+  sensitivePaths: [] as string[],
+  /** 이름에 이 낱말이 들어간 이미지·PDF 는 민감 정보로 숨긴다 (isSensitiveName) */
+  sensitiveNameWords: ["통장사본", "통장 사본", "신분증", "주민등록증", "운전면허증", "여권", "서명", "싸인", "사인", "도장", "인감", "가족관계", "등본"] as string[],
   deletedRetentionDays: 30,
   fullScanIntervalHours: 6,
   maxExtractMB: 50,
@@ -81,8 +85,12 @@ export function getSettings(db: Db): Settings {
   for (const r of rows) if (r.key in out) out[r.key] = r.value;
   // 예전에 저장된 이스케이프 경로도 바르게 읽는다
   out.excludedFolders = [...new Set((out.excludedFolders as string[]).map(normalizeUserPath).filter(Boolean))];
+  out.sensitivePaths = [...new Set((out.sensitivePaths as string[]).map((p) => p.normalize("NFC")).filter(Boolean))];
   return out as Settings;
 }
+
+/** 색인하지 않는 경로 전체: 제외 폴더 + 민감 정보로 숨긴 폴더·파일 */
+export const excludedPaths = (s: Pick<Settings, "excludedFolders" | "sensitivePaths">) => [...s.excludedFolders, ...s.sensitivePaths];
 
 export function setSetting<K extends keyof Settings>(db: Db, key: K, value: Settings[K]) {
   const exists = db.select().from(settings).where(eq(settings.key, key)).get();

@@ -105,6 +105,25 @@ npm run service:install                              # 빌드 → DB 준비 → 
 
 평소에는 launchd 서비스로 상시 실행됩니다. 로그인하면 자동으로 시작하고, 죽으면 10초 뒤 다시 시작합니다.
 
+### 한 곳에서 관리하기 (`hub` 명령)
+
+처음 한 번 `npm run hub:setup` 을 실행하면 두 가지가 생깁니다.
+
+- **`~/my-hub` 폴더**: 코드·데이터·로그·백업(외장)·AI 모델(외장)·Ollama 로그·자동 실행 설정의 **바로가기 모음**. 실제 파일은 원래 위치에 그대로 있습니다 (DB 는 내장 디스크, 백업은 DB 와 다른 디스크, 모델은 용량 때문에 외장). 인덱서는 바로가기를 따라가지 않습니다.
+- **`hub` 명령** (`~/.local/bin/hub`, 이름이 겹치면 `myhub`)
+
+| 명령 | 하는 일 |
+|---|---|
+| `hub status` | 웹·워커·웹 응답·Tailscale·Ollama·외장 디스크·마지막 백업·소스 연결 문제를 한 번에 |
+| `hub restart` | 빌드 없이 다시 시작 |
+| `hub update` | 코드 변경 후: 빌드 → DB 준비 → 다시 시작 (`service:restart` 와 같음) |
+| `hub stop` / `hub start` | 멈춤 / 시작 |
+| `hub logs [web\|worker\|build\|ollama]` | 로그 실시간 보기 |
+| `hub where` | 모든 위치와 용량 |
+| `hub models` | Ollama 모델 목록, 허브가 쓰는 모델 표시 |
+| `hub backup` | 지금 바로 백업 |
+| `hub open` / `hub web` | `~/my-hub` 폴더 열기 / 허브 화면 열기 |
+
 | 명령 | 하는 일 |
 |---|---|
 | `npm run service:status` | 실행 상태와 최근 로그 |

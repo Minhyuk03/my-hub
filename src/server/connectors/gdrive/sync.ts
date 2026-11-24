@@ -14,10 +14,10 @@ import type { Db } from "../../db";
 import { folders, items, scanJobs, sources } from "../../db/schema";
 import { extractText, isExtractable, kindOf } from "../../extract";
 import { writeItemText } from "../../search/index-writer";
-import { getSettings, type Settings } from "../../settings";
+import { excludedPaths, getSettings, type Settings } from "../../settings";
 import { finalizeDeletions, purgeExcluded, recordError } from "../../sync/scanner";
 import { cloudPathLabel, markDeletedByExternal, patchSourceConfig, seg, upsertCloudFolder } from "../common";
-import { isExcludedName } from "../../sources/rules";
+import { isExcludedFolder, isExcludedName, isSensitiveName } from "../../sources/rules";
 import { EXPORTS, FOLDER_MIME, SHORTCUT_MIME, TokenError, type DriveClient, type DriveFile } from "./client";
 
 type Source = typeof sources.$inferSelect;
@@ -43,8 +43,15 @@ function classify(e: unknown): { status: "offline" | "error"; message: string } 
 }
 
 // ---------- 파일 ----------
+/** Drive 파일·폴더를 색인하지 않을지: 제외 폴더·민감 정보로 숨긴 곳 안이거나, 파일 이름이 민감 정보 이름 규칙에 걸림 */
+export function driveSkipped(p: string, name: string, settings: Settings, isFolder = false): boolean {
+  return isExcludedFolder(p, excludedPaths(settings)) || (!isFolder && isSensitiveName(name, settings.sensitiveNameWords));
+}
+
 export async function processDriveFile(db: Db, src: Source, client: DriveClient, f: DriveFile, parentPath: string, folderId: number | null, jobId: number | null, settings: Settings, now: number) {
   const path = `${parentPath}/${seg(f.name, f.id)}`;
+  // 제외·민감 정보로 숨긴 곳, 이름 규칙(통장사본·신분증·서명 등)에 걸린 파일은 받지도 넣지도 않는다
+  if (driveSkipped(path, f.name, settings)) return;
   const modifiedAt = ts(f.modifiedTime);
   const size = Number(f.size ?? 0);
   const ex = EXPORTS[f.mimeType];
@@ -145,6 +152,7 @@ async function scanFolder(db: Db, src: Source, d: DriveSyncDeps, folder: { id: s
       if (isExcludedName(f.name, settings.excludedPatterns)) continue; // 숨김 파일(.DS_Store 등)·제외 이름
       if (f.mimeType === FOLDER_MIME) {
         const p = `${folder.path}/${seg(f.name, f.id)}`;
+        if (driveSkipped(p, f.name, settings, true)) continue; // 숨긴 폴더는 들어가지 않는다
         subs.push({ id: f.id, path: p, rowId: upsertCloudFolder(db, src, f.id, f.name, p, ts(f.modifiedTime), jobId) });
       } else files.push(f);
     }
@@ -284,6 +292,7 @@ export async function runDriveChanges(db: Db, sourceId: number, d: DriveSyncDeps
         }
         if (f.mimeType === FOLDER_MIME) {
           const p = `${parent.path}/${seg(f.name, f.id)}`;
+          if (driveSkipped(p, f.name, settings, true)) continue;
           const isNew = !db.select().from(folders).where(and(eq(folders.sourceId, src.id), eq(folders.externalId, f.id), eq(folders.state, "ok"))).get();
           const rowId = upsertCloudFolder(db, src, f.id, f.name, p, ts(f.modifiedTime), null);
           // 다른 곳에서 옮겨 온 폴더는 안의 내용을 따로 알려 주지 않으므로 직접 훑는다
@@ -308,6 +317,8 @@ export async function runDriveChanges(db: Db, sourceId: number, d: DriveSyncDeps
       }
     }
     setConfig(db, src, { pageToken: token });
+    // 변경분에 숨긴 폴더 안으로 옮겨진 파일 등이 있으면 색인에서 뺀다
+    if (changed) purgeExcluded(db, settings);
     if (src.status !== "syncing") db.update(sources).set({ status: "ok", lastError: null }).where(eq(sources.id, src.id)).run();
     return { result: "ok", changed };
   } catch (e) {

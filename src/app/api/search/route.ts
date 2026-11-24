@@ -14,6 +14,15 @@ export async function GET(req: NextRequest) {
   const limit = Math.min(50, Number(sp.get("limit") ?? 20));
   const mode = (["keyword", "semantic", "hybrid"].includes(sp.get("mode") ?? "") ? sp.get("mode") : "hybrid") as "hybrid" | "keyword" | "semantic";
   const db = getDb();
+  // ⌘K 의 "최근 연 항목"(브라우저에 저장된 기록) 중 허브에 아직 있는 것만 알려 준다. 숨긴 항목의 제목이 남지 않게
+  const known = sp.get("known");
+  if (known !== null) {
+    const ids = [...new Set(known.split(",").map(Number).filter((n) => Number.isInteger(n) && n > 0))].slice(0, 50);
+    const live = ids.length
+      ? (db.$client.prepare(`SELECT id FROM items WHERE state != 'deleted' AND id IN (${ids.map(() => "?").join(",")})`).pluck().all(...ids) as number[])
+      : [];
+    return Response.json({ ids: live });
+  }
   // ⌘K 를 막 열었을 때: 검색어 없이 최근 수정한 항목
   if (!q.trim() && sp.get("recent")) return Response.json(browse(db, parseFilters(sp), limit));
   const hasVectors = (db.$client.prepare(`SELECT count(*) FROM item_chunk_state`).pluck().get() as number) > 0;

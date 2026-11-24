@@ -19,7 +19,8 @@
     "service:uninstall": "bash scripts/service/uninstall.sh",
     "service:restart": "bash scripts/service/restart.sh",
     "service:status": "bash scripts/service/status.sh",
-    "build:native": "bash scripts/service/build-native.sh"
+    "build:native": "bash scripts/service/build-native.sh",
+    "hub:setup": "bash scripts/hub.sh setup"
   },
   "dependencies": {
     "@base-ui/react": "^1.8.0",

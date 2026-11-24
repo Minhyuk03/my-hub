@@ -6,9 +6,9 @@ import { refresh } from "next/cache";
 import { HOME, PATHS } from "@/lib/config";
 import { isMountPoint } from "@/lib/env-check";
 import { getDb } from "@/server/db";
-import { createSource, enqueue, previewNewSource, removeSource } from "@/server/sources/manage";
+import { createSource, enqueue, previewNewSource, relocateSource, removeSource } from "@/server/sources/manage";
 import { checkNewFolder, normalizeUserPath, isExcludedFolder, isExcludedName, isExcludedVolume, isInside, volumeRootOf, type SourceCheck } from "@/server/sources/rules";
-import { getSettings, setSetting } from "@/server/settings";
+import { excludedPaths, getSettings, setSetting } from "@/server/settings";
 
 export type DirListing = {
   path: string;
@@ -54,7 +54,7 @@ export async function listDir(p: string): Promise<DirListing> {
     parent: real === "/" ? null : path.dirname(real),
     dirs: [],
     check,
-    canCreateHere: !!vr && !isExcludedVolume(real) && !isExcludedFolder(real, s.excludedFolders),
+    canCreateHere: !!vr && !isExcludedVolume(real) && !isExcludedFolder(real, excludedPaths(s)),
   };
   if (!browsable(real)) return { ...base, parent: null, error: "이 위치는 볼 수 없습니다." };
   try {
@@ -64,7 +64,7 @@ export async function listDir(p: string): Promise<DirListing> {
       .map((d) => ({ name: d.name.normalize("NFC"), path: path.join(real, d.name) }))
       .filter((d) => {
         try {
-          return fs.statSync(d.path).isDirectory() && !isExcludedFolder(d.path, s.excludedFolders) && !isExcludedVolume(d.path);
+          return fs.statSync(d.path).isDirectory() && !isExcludedFolder(d.path, excludedPaths(s)) && !isExcludedVolume(d.path);
         } catch {
           return false;
         }
@@ -87,18 +87,36 @@ export async function addSourceAction(p: string, name?: string): Promise<{ ok: b
   }
 }
 
+/** 옮긴 폴더로 소스 위치 바꾸기 (프로젝트 연결·태그 유지) */
+export async function relocateSourceAction(id: number, p: string): Promise<{ ok: boolean; message: string }> {
+  if (!Number.isInteger(id) || typeof p !== "string") return { ok: false, message: "잘못된 요청입니다." };
+  try {
+    const r = relocateSource(getDb(), id, p);
+    refresh();
+    return { ok: true, message: `${r.name} 위치를 ${r.root} 로 바꿨습니다. 항목 ${r.moved.toLocaleString()}개를 옮겼고, 다시 검사를 시작합니다.` };
+  } catch (e) {
+    return { ok: false, message: (e as Error).message };
+  }
+}
+
+/** 위치 바꾸기 선택기의 시작 위치: 원래 경로에서 아직 남아 있는 가장 가까운 상위 폴더 */
+export async function nearestExisting(p: string): Promise<string | null> {
+  for (let d = path.dirname(p); d && d !== "/" && d !== path.dirname(d); d = path.dirname(d)) if (browsable(d) && fs.existsSync(d)) return d;
+  return null;
+}
+
 export async function removeSourceAction(id: number) {
   removeSource(getDb(), id);
   refresh();
 }
 
 export async function previewNewFolder(parent: string, name: string) {
-  return checkNewFolder(parent, name, getSettings(getDb()).excludedFolders);
+  return checkNewFolder(parent, name, excludedPaths(getSettings(getDb())));
 }
 
 /** 확인을 받은 뒤에만 호출된다. 기존 폴더를 옮기거나 지우지 않는다. */
 export async function createFolderAction(parent: string, name: string, alsoAdd: boolean) {
-  const c = checkNewFolder(parent, name, getSettings(getDb()).excludedFolders);
+  const c = checkNewFolder(parent, name, excludedPaths(getSettings(getDb())));
   if (!c.ok) return { ok: false, message: c.error! };
   fs.mkdirSync(c.path!); // recursive 아님: 상위 폴더가 이미 있어야 한다
   if (alsoAdd) return addSourceAction(c.path!);

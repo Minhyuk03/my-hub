@@ -14,7 +14,7 @@ import { ConfirmSubmit } from "./settings/confirm-submit";
 
 // 아임웹 MULTIPLY 테마 느낌: 화면 끝까지 닿는 배경 사진 위 큰 가는 글씨(맨 위 메뉴 줄이 투명하게 겹침).
 // 배경 사진은 끝까지 화면에 붙어 있고, 아래 내용은 반투명 판으로 그 위에 떠오른다(사진은 흐려진 채 계속 보임)
-// → About → Profile → Project 사진 격자 → 짙은 회색 연락처 띠. 글꼴·색은 layout.tsx·globals.css 공통 (--taupe, --footer).
+// → About → Profile → Project 사진 격자 → 검은 연락처 띠. 글꼴·색은 layout.tsx·globals.css 공통 (--taupe, --footer).
 
 /** 사진 위에 떠 있는 반투명 판 (흐린 사진이 비쳐 보임) */
 const panel = "rounded-sm bg-background/80 p-6 shadow-2xl backdrop-blur-md sm:p-10";
@@ -82,7 +82,7 @@ function SnsList({ sns }: { sns: Profile["sns"] }) {
         const name = s.title || shortUrl(s.url);
         const body = (
           <>
-            <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-[var(--taupe)] text-xs font-normal text-white uppercase">{name.slice(0, 1)}</span>
+            <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-normal text-primary-foreground uppercase">{name.slice(0, 1)}</span>
             <span className="min-w-0 flex-1">
               <span className="block text-sm font-normal">{name}</span>
               <span className="block truncate text-xs text-muted-foreground">{s.desc || shortUrl(s.url)}</span>
@@ -191,7 +191,7 @@ export default async function ProfilePage({ searchParams }: PageProps<"/">) {
       {/* sticky 에서는 left 가 붙는 기준이 되므로 화면 끝까지 늘리기를 여백으로 한다 */}
       <HeroFx className="sticky top-0 isolate z-0 ml-[calc(50%-50vw)] w-screen overflow-hidden bg-neutral-700 text-white">
         <div className="absolute inset-0 -z-20" style={heroBackdropStyle}>
-          {hero ? <CoverImage src={hero} position={heroPos} className="size-full" /> : <div className="size-full bg-gradient-to-br from-stone-500 via-stone-600 to-stone-800" />}
+          {hero ? <CoverImage src={hero} position={heroPos} className="size-full" /> : <div className="size-full bg-gradient-to-br from-neutral-500 via-neutral-700 to-neutral-900" />}
         </div>
         <div className="absolute inset-0 -z-10 bg-black/35" />
         <div className="mx-auto grid min-h-[100svh] max-w-6xl items-center gap-10 px-4 pt-32 pb-16 md:grid-cols-[1fr_22rem]" style={heroTextStyle}>
@@ -417,7 +417,7 @@ export default async function ProfilePage({ searchParams }: PageProps<"/">) {
                         {w.cover ? (
                           <CoverImage src={w.cover} position={w.coverPos} className="aspect-[4/3] w-full transition-transform duration-500 group-hover:scale-105" />
                         ) : (
-                          <div className="flex aspect-[4/3] w-full items-center justify-center bg-stone-200 p-6 text-center text-stone-500 dark:bg-stone-800 dark:text-stone-400">
+                          <div className="flex aspect-[4/3] w-full items-center justify-center bg-neutral-200 p-6 text-center text-neutral-500 dark:bg-neutral-800 dark:text-neutral-400">
                             <span className="tracking-[0.15em]">{w.title || "Project"}</span>
                           </div>
                         )}

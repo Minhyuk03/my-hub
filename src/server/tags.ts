@@ -3,6 +3,8 @@
  * - Obsidian·Notion 원본 파일은 바꾸지 않는다. 색인할 때 이름을 바꿔 저장할 뿐이다.
  * - 하위 태그도 따라간다: "수업/자료구조" → "학교/자료구조"
  * - 규칙을 바꾸면 applyTagAliases 로 이미 저장된 태그도 다시 맞춘다. 규칙을 지우고 다시 색인하면 원래대로 돌아온다.
+ * - 합칠 이름이 빈 값("")이면 삭제 규칙: 허브에서 그 태그(와 하위 태그)를 없앤다. 설정 화면에서는 "태그 = (삭제)" 로 쓴다.
+ *   노트 원본의 #태그는 다시 색인해도 규칙 때문에 들어오지 않는다. 직접 단·수락한 태그는 지우면 되돌릴 수 없다 (백업에서만).
  */
 import { eq, inArray } from "drizzle-orm";
 import type { Db } from "./db";
@@ -11,9 +13,12 @@ import { getSettings } from "./settings";
 
 export type TagAliases = Record<string, string>;
 
+/** 설정 화면에서 삭제 규칙을 나타내는 글자 */
+export const DELETE_MARK = "(삭제)";
+
 const nfc = (s: string) => s.trim().normalize("NFC");
 
-/** 별명 규칙을 적용한 이름 (규칙이 연쇄되면 끝까지 따라가되, 순환은 막는다) */
+/** 별명 규칙을 적용한 이름 (규칙이 연쇄되면 끝까지 따라가되, 순환은 막는다). 삭제 규칙에 걸리면 "" */
 export function aliasOf(aliases: TagAliases, name: string): string {
   let cur = nfc(name);
   const seen = new Set<string>();
@@ -24,11 +29,13 @@ export function aliasOf(aliases: TagAliases, name: string): string {
     let next: string | null = null;
     for (const [from, to] of Object.entries(aliases)) {
       const f = nfc(from).toLowerCase();
-      if (lower === f) next = nfc(to);
-      else if (lower.startsWith(f + "/")) next = nfc(to) + cur.slice(f.length);
-      if (next) break;
+      const t = nfc(to);
+      if (lower === f) next = t;
+      else if (lower.startsWith(f + "/")) next = t ? t + cur.slice(f.length) : "";
+      if (next !== null) break;
     }
-    if (!next || next === cur) return cur;
+    if (next === "") return "";
+    if (next === null || next === cur) return cur;
     cur = next;
   }
 }
@@ -40,7 +47,7 @@ export function aliasAll(aliases: TagAliases, names: string[]): string[] {
   return [...new Set(names.map((n) => aliasOf(aliases, n)).filter(Boolean))];
 }
 
-/** "수업 = 학교" 한 줄씩 → 규칙. 잘못된 줄은 건너뛴다 */
+/** "수업 = 학교" 한 줄씩 → 규칙. "태그 = (삭제)" 는 삭제 규칙. 잘못된 줄은 건너뛴다 */
 export function parseAliasLines(text: string): TagAliases {
   const out: TagAliases = {};
   for (const line of text.split("\n")) {
@@ -48,10 +55,18 @@ export function parseAliasLines(text: string): TagAliases {
     if (!m) continue;
     const from = nfc(m[1]);
     const to = nfc(m[2]);
-    if (from && to && from.toLowerCase() !== to.toLowerCase()) out[from] = to;
+    if (!from || !to) continue;
+    if (to === DELETE_MARK || to === "삭제") out[from] = "";
+    else if (from.toLowerCase() !== to.toLowerCase()) out[from] = to;
   }
   return out;
 }
+
+/** 설정 화면에 보여 줄 줄 */
+export const aliasLines = (aliases: TagAliases) =>
+  Object.entries(aliases)
+    .map(([a, b]) => `${a} = ${b || DELETE_MARK}`)
+    .join("\n");
 
 /** 이미 저장된 태그(본문 태그·수락한 태그·이모지)를 지금 규칙에 맞게 옮긴다. 옮긴 태그 이름 수를 돌려준다 */
 export function applyTagAliases(db: Db, aliases: TagAliases = tagAliases(db)): number {
@@ -61,6 +76,14 @@ export function applyTagAliases(db: Db, aliases: TagAliases = tagAliases(db)): n
     for (const t of all) {
       const target = aliasOf(aliases, t.name);
       if (target === t.name) continue;
+      if (!target) {
+        // 삭제 규칙: 이 태그를 단 기록과 이모지를 지운다 (태그 이름은 아래에서 함께 정리)
+        db.delete(itemTags).where(eq(itemTags.tagId, t.id)).run();
+        db.delete(itemTagsManual).where(eq(itemTagsManual.tagId, t.id)).run();
+        db.delete(tagStyles).where(eq(tagStyles.name, t.name)).run();
+        moved++;
+        continue;
+      }
       db.insert(tags).values({ name: target }).onConflictDoNothing().run();
       const to = db.select().from(tags).where(eq(tags.name, target)).get()!;
       for (const table of [itemTags, itemTagsManual] as const) {

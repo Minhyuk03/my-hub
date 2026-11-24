@@ -13,11 +13,11 @@ import { applyRetention, createBackup, flushPending, listBackups, PENDING_DIR, r
 import { runEnvCheck } from "@/lib/env-check";
 import { openDb } from "@/server/db";
 import { backups, commands, runtime, scanJobs, sources } from "@/server/db/schema";
-import { getSettings } from "@/server/settings";
+import { excludedPaths, getSettings } from "@/server/settings";
 import { checkAvailability } from "@/server/sources/availability";
 import { refreshSuggestions } from "@/server/projects/suggest";
 import { seedDefaultSources } from "@/server/sources/manage";
-import { isExcludedFolder, isExcludedName, isInside, skippedBySource } from "@/server/sources/rules";
+import { isExcludedFolder, isExcludedName, isInside, isSensitiveName, skippedBySource } from "@/server/sources/rules";
 import { processFile, purgeExcluded, realDeps, reindexItems, retryDue, runScan } from "@/server/sync/scanner";
 import { ScanBackoff } from "@/server/sync/backoff";
 import { trimLog } from "@/server/logs";
@@ -180,7 +180,8 @@ function startWatcher(src: typeof sources.$inferSelect) {
     const rel = p.slice(src.rootPath.length + 1).split("/");
     return (
       rel.some((seg) => isExcludedName(seg, settings.excludedPatterns)) ||
-      isExcludedFolder(p, settings.excludedFolders) ||
+      isExcludedFolder(p, excludedPaths(settings)) ||
+      isSensitiveName(path.basename(p), settings.sensitiveNameWords) ||
       nested.some((n) => isInside(p, n)) ||
       (skippedBySource(src.config, p) && path.extname(p) !== "")
     );
@@ -291,6 +292,12 @@ async function handleCommands() {
         case "source_removed":
           await stopWatcher(sourceId);
           online.delete(sourceId);
+          break;
+        case "source_moved":
+          // 위치를 바꾼 소스: 옛 경로 감시를 멈추고, 새 경로로 감시 시작 + 전체 스캔
+          await stopWatcher(sourceId);
+          online.delete(sourceId);
+          await checkSources();
           break;
         case "retry":
           await retryDue(db, deps, (c.payload.itemIds as number[] | undefined) ?? undefined);

@@ -5,7 +5,7 @@ import { buildGraph } from "@/server/graph";
 import { search } from "@/server/search/query";
 import { setSetting } from "@/server/settings";
 import { runScan } from "@/server/sync/scanner";
-import { aliasOf, applyTagAliases, parseAliasLines } from "@/server/tags";
+import { aliasLines, aliasOf, applyTagAliases, parseAliasLines } from "@/server/tags";
 import { addSource, deps, testDb, tmpDir, write } from "./helpers";
 
 const tagNames = (db: ReturnType<typeof testDb>) =>
@@ -50,5 +50,39 @@ describe("태그 합치기 (허브 안에서만)", () => {
     fs.writeFileSync(path.join(root, "b.md"), "#수업 또 바뀜");
     await runScan(db, src.id, deps());
     expect(tagNames(db)).toContain("수업");
+  });
+
+  it("삭제 규칙: 노트 태그·직접 단 태그를 없애고, 다시 색인해도 들어오지 않으며, 같은 이름의 다른 대소문자 태그는 규칙을 따른다", async () => {
+    const a = { 후쿠오카: "", "AI/코드": "", javascript: "JavaScript" };
+    expect(aliasOf(a, "후쿠오카")).toBe("");
+    expect(aliasOf(a, "후쿠오카/맛집")).toBe(""); // 하위 태그도
+    expect(aliasOf(a, "후쿠오카여행")).toBe("후쿠오카여행");
+    expect(aliasOf(a, "AI")).toBe("AI");
+    expect(aliasOf(a, "JavaScript")).toBe("JavaScript"); // 큰 태그는 그대로
+    expect(parseAliasLines("후쿠오카 = (삭제)\n회고 = 삭제\n수업 = 학교")).toEqual({ 후쿠오카: "", 회고: "", 수업: "학교" });
+    expect(parseAliasLines(aliasLines({ 후쿠오카: "", 수업: "학교" }))).toEqual({ 후쿠오카: "", 수업: "학교" });
+
+    const db = testDb();
+    const root = tmpDir();
+    write(root, "a.md", "#후쿠오카 #여행 노트");
+    write(root, "b.md", "#여행 두 번째");
+    const src = addSource(db, root);
+    await runScan(db, src.id, deps());
+    const now = Date.now();
+    const b = db.$client.prepare(`SELECT id FROM items WHERE path LIKE '%b.md'`).pluck().get() as number;
+    db.$client.prepare(`INSERT INTO tags(name) VALUES ('도쿄')`).run();
+    const tid = db.$client.prepare(`SELECT id FROM tags WHERE name = '도쿄'`).pluck().get() as number;
+    db.$client.prepare(`INSERT INTO item_tags_manual(item_id, tag_id, origin, created_at) VALUES (?, ?, 'ai', ?)`).run(b, tid, now);
+    db.$client.prepare(`INSERT INTO tag_styles(name, emoji) VALUES ('후쿠오카', '🍜')`).run();
+    expect(tagNames(db)).toEqual(["도쿄", "여행", "후쿠오카"]);
+
+    const rules = { 후쿠오카: "", 도쿄: "" };
+    setSetting(db, "tagAliases", rules);
+    expect(applyTagAliases(db, rules)).toBe(2);
+    expect(tagNames(db)).toEqual(["여행"]);
+    expect(db.$client.prepare(`SELECT count(*) FROM tag_styles`).pluck().get()).toBe(0);
+    fs.writeFileSync(path.join(root, "a.md"), "#후쿠오카 #여행 바뀐 노트");
+    await runScan(db, src.id, deps());
+    expect(tagNames(db)).toEqual(["여행"]);
   });
 });

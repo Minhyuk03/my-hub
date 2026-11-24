@@ -9,13 +9,16 @@ import { SOURCE_KIND_LABEL } from "@/lib/labels";
 import { getDb } from "@/server/db";
 import { sourcesWithStats } from "@/server/queries";
 import { getSettings } from "@/server/settings";
-import { removeSourceAction, saveSettings, shortcuts } from "./actions";
+import { nearestExisting, removeSourceAction, saveSettings, shortcuts } from "./actions";
+import { RelocateSource } from "./relocate-source";
 import { ConfirmSubmit } from "./confirm-submit";
+import { saveSensitiveWords, unhideSensitiveAction } from "./sensitive-actions";
 import { PolicyToggle } from "@/components/policy-toggle";
 import { denyList } from "@/server/chat/policy";
 import { hasKey } from "@/server/chat/llm";
 import { saveChatSettings } from "./chat-actions";
 import { saveTagAliases } from "./tag-actions";
+import { aliasLines } from "@/server/tags";
 import { connectCalendar, disconnectCalendar, refreshCalendar, saveCalendarHidden } from "./calendar-actions";
 import type { CalendarSnapshot } from "@/server/calendar";
 import { runtime } from "@/server/db/schema";
@@ -122,6 +125,13 @@ export default async function SettingsPage({ searchParams }: PageProps<"/setting
   const s = getSettings(db);
   const srcs = sourcesWithStats(db);
   const sc = await shortcuts();
+  // 폴더 없음·연결 끊김인 파일 소스: 옛 위치 근처에서 고르기 시작하도록 바로가기를 앞에 둔다
+  const movable = new Map<number, Awaited<ReturnType<typeof shortcuts>>>();
+  for (const x of srcs)
+    if ((x.status === "error" || x.status === "offline") && x.rootPath.startsWith("/")) {
+      const near = await nearestExisting(x.rootPath);
+      movable.set(x.id, near && !sc.some((c) => c.path === near) ? [{ label: `원래 위치 근처 (${shortPath(near)})`, path: near }, ...sc] : sc);
+    }
   const driveMsg = (await searchParams).gdrive;
   const denv = driveEnv();
   const dexp = driveExpiry(s.gdriveAccount, s.gdriveTestingMode);
@@ -155,6 +165,7 @@ export default async function SettingsPage({ searchParams }: PageProps<"/setting
     ["calendar", "Calendar", "일정"],
     ["chat", "AI Chat", "AI 채팅"],
     ["portfolio", "Portfolio", "첫 화면"],
+    ["sensitive", "Sensitive", "민감 정보"],
     ["rules", "Rules", "제외 규칙과 동작"],
   ];
   const err = "text-destructive";
@@ -207,6 +218,8 @@ export default async function SettingsPage({ searchParams }: PageProps<"/setting
                         <ConfirmSubmit message={`'${src.name}' 을(를) 인덱싱에서 뺄까요? 실제 파일은 그대로 남습니다. 이 폴더들에 걸린 프로젝트 연결도 함께 해제됩니다.`}>등록 해제</ConfirmSubmit>
                       </form>
                     </span>
+                    {src.status !== "ok" && src.status !== "syncing" && src.lastError && <p className="w-full text-xs text-destructive">{src.lastError}</p>}
+                    {movable.has(src.id) && <RelocateSource sourceId={src.id} name={src.name} shortcuts={movable.get(src.id)!} />}
                   </li>
                 ))}
               </ul>
@@ -478,18 +491,16 @@ export default async function SettingsPage({ searchParams }: PageProps<"/setting
             desc={
               <>
                 비슷한 태그를 허브 안에서 하나로 봅니다 (검색·그래프·태그 목록). 원본 노트는 바꾸지 않습니다. 한 줄에 &ldquo;원래 태그 = 합칠 태그&rdquo;, 하위 태그도 함께 옮겨집니다
-                (수업/자료구조 → 학교/자료구조). 줄을 지우면 다음 다시 색인 때 원래 이름으로 돌아옵니다.
+                (수업/자료구조 → 학교/자료구조). &ldquo;태그 = (삭제)&rdquo; 는 태그를 없앱니다. 줄을 지우면 노트에 적힌 태그는 다음 다시 색인 때 돌아오지만, 직접 단·수락한 태그는 돌아오지 않습니다.
               </>
             }
           >
             <form action={saveTagAliases} className="space-y-2">
               <textarea
                 name="aliases"
-                rows={Math.max(3, Object.keys(s.tagAliases).length + 1)}
-                defaultValue={Object.entries(s.tagAliases)
-                  .map(([a, b]) => `${a} = ${b}`)
-                  .join("\n")}
-                placeholder={"수업 = 학교\n코드 = 개발"}
+                rows={Math.min(14, Math.max(3, Object.keys(s.tagAliases).length + 1))}
+                defaultValue={aliasLines(s.tagAliases)}
+                placeholder={"수업 = 학교\n코드 = 개발\n안쓰는태그 = (삭제)"}
                 className={area}
               />
               <Button type="submit" size="sm">
@@ -643,6 +654,41 @@ export default async function SettingsPage({ searchParams }: PageProps<"/setting
                 </Link>
               ))}
             </div>
+          </Section>
+
+          <Section
+            id="sensitive"
+            label="Sensitive"
+            title="민감 정보로 숨긴 곳"
+            desc="폴더·항목 화면의 🙈 버튼으로 지정합니다. 숨긴 곳은 색인하지 않아 목록·검색·그래프·홈·AI 어디에도 나오지 않고, 그 자료를 인용한 AI 답변도 지웁니다. 실제 파일은 그대로이고, 다시 보이게 하면 다음 스캔에서 새로 색인합니다."
+          >
+            {s.sensitivePaths.length ? (
+              <ul className="divide-y rounded-sm border bg-card">
+                {s.sensitivePaths.map((p) => (
+                  <li key={p} className="flex items-center gap-3 px-4 py-2">
+                    <span className="min-w-0 flex-1 break-all text-sm">{shortPath(p)}</span>
+                    <form action={unhideSensitiveAction.bind(null, p)}>
+                      <ConfirmSubmit message={`${shortPath(p)} 을(를) 다시 보이게 할까요? 다음 스캔에서 검색·AI 에 다시 들어갑니다.`}>다시 보이기</ConfirmSubmit>
+                    </form>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-xs text-muted-foreground">숨긴 곳이 없습니다.</p>
+            )}
+            <form action={saveSensitiveWords} className="space-y-2 border-t pt-4">
+              <label className="block space-y-1">
+                <span>이름으로 숨기기</span>
+                <span className="block text-xs text-muted-foreground">
+                  이미지·PDF 파일 이름에 이 낱말이 들어 있으면 자동으로 숨깁니다 (통장사본·신분증·서명 사진 등). 앞으로 새로 생기는 파일에도 적용됩니다. 한글 서식(hwp)·문서 파일은 걸리지 않습니다. 한 줄에
+                  하나, 두 글자 이상.
+                </span>
+                <textarea name="words" defaultValue={s.sensitiveNameWords.join("\n")} rows={6} className={area} />
+              </label>
+              <Button type="submit" size="sm" variant="outline">
+                저장
+              </Button>
+            </form>
           </Section>
 
           <Section id="rules" label="Rules" title="제외 규칙과 동작" desc="숨김 파일·폴더(이름이 .으로 시작)는 항상 제외합니다. 백업 폴더도 자동으로 제외합니다.">

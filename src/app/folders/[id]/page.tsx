@@ -14,6 +14,7 @@ import { isLocalRequest } from "@/server/http/local";
 import { linkFolderToProject, pinFolder } from "./actions";
 import { FinderButton } from "./finder-button";
 import { PolicyToggle } from "@/components/policy-toggle";
+import { HideSensitiveButton } from "@/components/hide-sensitive-button";
 import { isDirectlyDenied } from "@/server/chat/policy";
 import { externalDeny } from "@/server/db/schema";
 import type { Db } from "@/server/db";
@@ -81,6 +82,15 @@ export default async function FolderPage({ params, searchParams }: PageProps<"/f
         <p className="break-all text-sm text-muted-foreground">{shortPath(f.path)}</p>
         {f.state === "deleted" && <p className="text-sm text-destructive">폴더 없음 (삭제되었거나 찾을 수 없음)</p>}
         {s.status === "offline" && <p className="text-sm text-destructive">소스가 오프라인입니다.</p>}
+        {s.status === "error" && s.rootPath.startsWith("/") && (
+          <p className="text-sm text-destructive">
+            소스 폴더를 찾을 수 없습니다 (이동 또는 삭제됨). 폴더를 옮겼다면{" "}
+            <Link href="/settings#sources" className="underline">
+              설정 → 인덱싱 폴더
+            </Link>
+            에서 위치를 바꾸세요.
+          </p>
+        )}
       </div>
       <div className="flex flex-wrap items-center gap-2">
         {parent && parent.path.startsWith(s.rootPath) && (
@@ -105,6 +115,7 @@ export default async function FolderPage({ params, searchParams }: PageProps<"/f
           </a>
         )}
         <PolicyToggle kind="folder" id={f.id} denied={isDirectlyDenied(db, "folder", f.id)} inherited={folderInherited(db, f, s)} />
+        {f.path !== s.rootPath && <HideSensitiveButton kind="folder" id={f.id} />}
         {!pinned && (
           <form action={pinFolder.bind(null, f.id)}>
             <Button type="submit" variant="outline" size="sm">

@@ -132,6 +132,28 @@ describe("Google Drive 연결 (Phase 3a)", () => {
     expect(fake.calls.some((c) => c.includes("?alt=media") && c.includes("F4"))).toBe(false);
   });
 
+  it("민감 정보: 이름 규칙(통장사본·서명)에 걸린 파일과 숨긴 폴더는 받지도 넣지도 않고, 변경분으로 들어와도 빠진다", async () => {
+    const { setSetting } = await import("@/server/settings");
+    const { db, fake, src, d } = setup();
+    const docs = fake.add({ name: "제출 서류", parent: "ROOT", mimeType: FOLDER_MIME });
+    fake.add({ name: "참여신청서.txt", parent: docs, content: "주민번호 들어간 신청서" });
+    fake.add({ name: "통장사본_정민혁.pdf", parent: "ROOT", mimeType: "application/pdf", content: "%PDF" });
+    fake.add({ name: "정민혁_서명.png", parent: "ROOT", mimeType: "image/png", content: "png" });
+    fake.add({ name: "회의록_서명 추가.txt", parent: "ROOT", content: "회의 내용" });
+    await runDriveScan(db, src.id, d);
+    expect(titles(db)).toEqual(["참여신청서.txt", "회의록_서명 추가.txt"]);
+    const folder = db.select().from(folders).where(eq(folders.externalId, docs)).get()!;
+    setSetting(db, "sensitivePaths", [folder.path]);
+    await runDriveScan(db, src.id, d);
+    expect(titles(db)).toEqual(["회의록_서명 추가.txt"]);
+    // 숨긴 폴더 안에 새 파일이 생겨도 변경분 확인에서 넣지 않는다
+    fake.add({ name: "신분증.txt", parent: docs, content: "신분증 메모" });
+    await runDriveChanges(db, src.id, d);
+    expect(titles(db)).toEqual(["회의록_서명 추가.txt"]);
+    // 통장사본(F3)·서명(F4)·숨긴 폴더의 새 파일(F6)은 내용을 받지 않는다
+    for (const id of ["F3", "F4", "F6"]) expect(fake.calls.some((c) => c.includes(`/${id}?alt=media`)), id).toBe(false);
+  });
+
   it("숨김 파일(.DS_Store)·제외 이름은 가져오지 않는다", async () => {
     const { db, fake, src, d } = setup();
     fake.add({ name: ".DS_Store", parent: "ROOT", content: "x" });
