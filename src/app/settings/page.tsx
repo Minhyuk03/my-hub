@@ -9,9 +9,10 @@ import { SOURCE_KIND_LABEL } from "@/lib/labels";
 import { getDb } from "@/server/db";
 import { sourcesWithStats } from "@/server/queries";
 import { getSettings } from "@/server/settings";
-import { removeSourceAction, saveSettings, shortcuts } from "./actions";
+import { nearestExisting, removeSourceAction, saveSettings, shortcuts } from "./actions";
+import { RelocateSource } from "./relocate-source";
 import { ConfirmSubmit } from "./confirm-submit";
-import { unhideSensitiveAction } from "./sensitive-actions";
+import { saveSensitiveWords, unhideSensitiveAction } from "./sensitive-actions";
 import { PolicyToggle } from "@/components/policy-toggle";
 import { denyList } from "@/server/chat/policy";
 import { hasKey } from "@/server/chat/llm";
@@ -124,6 +125,13 @@ export default async function SettingsPage({ searchParams }: PageProps<"/setting
   const s = getSettings(db);
   const srcs = sourcesWithStats(db);
   const sc = await shortcuts();
+  // 폴더 없음·연결 끊김인 파일 소스: 옛 위치 근처에서 고르기 시작하도록 바로가기를 앞에 둔다
+  const movable = new Map<number, Awaited<ReturnType<typeof shortcuts>>>();
+  for (const x of srcs)
+    if ((x.status === "error" || x.status === "offline") && x.rootPath.startsWith("/")) {
+      const near = await nearestExisting(x.rootPath);
+      movable.set(x.id, near && !sc.some((c) => c.path === near) ? [{ label: `원래 위치 근처 (${shortPath(near)})`, path: near }, ...sc] : sc);
+    }
   const driveMsg = (await searchParams).gdrive;
   const denv = driveEnv();
   const dexp = driveExpiry(s.gdriveAccount, s.gdriveTestingMode);
@@ -210,6 +218,8 @@ export default async function SettingsPage({ searchParams }: PageProps<"/setting
                         <ConfirmSubmit message={`'${src.name}' 을(를) 인덱싱에서 뺄까요? 실제 파일은 그대로 남습니다. 이 폴더들에 걸린 프로젝트 연결도 함께 해제됩니다.`}>등록 해제</ConfirmSubmit>
                       </form>
                     </span>
+                    {src.status !== "ok" && src.status !== "syncing" && src.lastError && <p className="w-full text-xs text-destructive">{src.lastError}</p>}
+                    {movable.has(src.id) && <RelocateSource sourceId={src.id} name={src.name} shortcuts={movable.get(src.id)!} />}
                   </li>
                 ))}
               </ul>
@@ -666,6 +676,19 @@ export default async function SettingsPage({ searchParams }: PageProps<"/setting
             ) : (
               <p className="text-xs text-muted-foreground">숨긴 곳이 없습니다.</p>
             )}
+            <form action={saveSensitiveWords} className="space-y-2 border-t pt-4">
+              <label className="block space-y-1">
+                <span>이름으로 숨기기</span>
+                <span className="block text-xs text-muted-foreground">
+                  이미지·PDF 파일 이름에 이 낱말이 들어 있으면 자동으로 숨깁니다 (통장사본·신분증·서명 사진 등). 앞으로 새로 생기는 파일에도 적용됩니다. 한글 서식(hwp)·문서 파일은 걸리지 않습니다. 한 줄에
+                  하나, 두 글자 이상.
+                </span>
+                <textarea name="words" defaultValue={s.sensitiveNameWords.join("\n")} rows={6} className={area} />
+              </label>
+              <Button type="submit" size="sm" variant="outline">
+                저장
+              </Button>
+            </form>
           </Section>
 
           <Section id="rules" label="Rules" title="제외 규칙과 동작" desc="숨김 파일·폴더(이름이 .으로 시작)는 항상 제외합니다. 백업 폴더도 자동으로 제외합니다.">

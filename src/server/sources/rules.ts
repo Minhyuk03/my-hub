@@ -19,6 +19,25 @@ export function isExcludedName(name: string, patterns: string[]): boolean {
   return patterns.some((p) => matchPattern(name, p));
 }
 
+/** 이름 규칙으로 숨기는 파일 형식: 서류를 찍거나 스캔한 이미지·PDF */
+export const SENSITIVE_EXTS = new Set(["png", "jpg", "jpeg", "heic", "heif", "gif", "webp", "bmp", "tif", "tiff", "pdf"]);
+
+/**
+ * 민감 정보 이름 규칙: 이미지·PDF 파일 이름에 낱말(통장사본·신분증·서명 등)이 들어 있으면 숨긴다.
+ * macOS 파일 이름(NFD)·Google Drive 경로 조각("이름#ID")도 같은 이름으로 본다. 한글 서식(hwp) 같은 문서는 규칙에서 뺀다 (회의록 "서명 추가" 등).
+ */
+export function isSensitiveName(name: string, words: string[]): boolean {
+  if (!words.length) return false;
+  const n = name.replace(/#[A-Za-z0-9_-]+$/, "").normalize("NFC");
+  const dot = n.lastIndexOf(".");
+  if (dot <= 0 || !SENSITIVE_EXTS.has(n.slice(dot + 1).toLowerCase())) return false;
+  const base = n.slice(0, dot).toLowerCase();
+  return words.some((w) => {
+    const k = w.trim().normalize("NFC").toLowerCase();
+    return !!k && base.includes(k);
+  });
+}
+
 export const isInside = (child: string, parent: string) =>
   child === parent || child.startsWith(parent.endsWith("/") ? parent : parent + "/");
 
@@ -26,10 +45,18 @@ export function isExcludedVolume(p: string): boolean {
   return EXCLUDED_VOLUME_PATTERNS.some((re) => re.test(p));
 }
 
-/** 한글 경로는 NFC 로 맞춰 비교한다 (macOS 파일 이름은 NFD 인 경우가 많음) */
+/**
+ * 한글 경로는 NFC 로 맞춰 비교한다 (macOS 파일 이름은 NFD 인 경우가 많음).
+ * Google Drive·Notion 처럼 경로 조각이 "이름#ID" 인 곳은 ID 로도 비교한다 → 원본에서 이름을 바꿔도 계속 제외된다.
+ */
 export function isExcludedFolder(p: string, excludedFolders: string[]): boolean {
   const n = p.normalize("NFC");
-  return excludedFolders.some((f) => isInside(n, f.normalize("NFC")));
+  return excludedFolders.some((f) => {
+    const fn = f.normalize("NFC");
+    if (isInside(n, fn)) return true;
+    const id = fn.match(/#([A-Za-z0-9_-]{10,})$/)?.[1];
+    return !!id && !fn.startsWith("/") && (n.endsWith(`#${id}`) || n.includes(`#${id}/`));
+  });
 }
 
 /**

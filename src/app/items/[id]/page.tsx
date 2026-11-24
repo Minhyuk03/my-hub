@@ -59,7 +59,9 @@ export default async function ItemPage({ params, searchParams }: PageProps<"/ite
   let body = data.body;
   const local = isLocalRequest(await headers());
   const fileUrl = `/api/items/${item.id}/file`;
-  const available = item.state !== "deleted" && source.status !== "offline";
+  // 소스 폴더가 사라진 경우(이동·삭제)도 오프라인처럼 원본을 열지 않는다
+  const rootMissing = source.status === "error" && source.rootPath.startsWith("/");
+  const available = item.state !== "deleted" && source.status !== "offline" && !rootMissing;
   const obsidian = obsidianUrl(item.path);
   const hasEditor = !!getSettings(db).editorByExt[item.ext];
   const memberOf = projectsForItem(db, item.id);
@@ -106,7 +108,23 @@ export default async function ItemPage({ params, searchParams }: PageProps<"/ite
       </div>
     );
   } else if (!available) {
-    preview = <p className="text-sm text-muted-foreground">{source.status === "offline" ? "소스가 오프라인이라 원본을 열 수 없습니다. 인덱스에 저장된 정보만 표시합니다." : "삭제된 항목입니다."}</p>;
+    preview = (
+      <p className="text-sm text-muted-foreground">
+        {item.state === "deleted" ? (
+          "삭제된 항목입니다."
+        ) : rootMissing ? (
+          <>
+            소스 폴더를 찾을 수 없어(이동 또는 삭제됨) 원본을 열 수 없습니다. 인덱스에 저장된 정보만 표시합니다. 폴더를 옮겼다면{" "}
+            <Link href="/settings#sources" className="underline">
+              설정 → 인덱싱 폴더
+            </Link>
+            에서 위치를 바꾸세요.
+          </>
+        ) : (
+          "소스가 오프라인이라 원본을 열 수 없습니다. 인덱스에 저장된 정보만 표시합니다."
+        )}
+      </p>
+    );
   } else if (item.kind === "image" && item.ext !== "nef") {
     // eslint-disable-next-line @next/next/no-img-element
     preview = <img src={fileUrl} alt={item.title} className="max-h-[70vh] max-w-full rounded-md" />;

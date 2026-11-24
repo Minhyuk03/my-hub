@@ -99,7 +99,7 @@ export function tiles(db: Db): Tile[] {
     .map((s): Tile => {
       if (s.kind === "folder") {
         const f = db
-          .select({ id: folders.id, path: folders.path, state: folders.state, sourceKind: sources.kind, sourceStatus: sources.status })
+          .select({ id: folders.id, path: folders.path, state: folders.state, sourceKind: sources.kind, sourceStatus: sources.status, sourceRoot: sources.rootPath })
           .from(folders)
           .innerJoin(sources, eq(sources.id, folders.sourceId))
           .where(eq(folders.id, Number(s.target)))
@@ -111,7 +111,8 @@ export function tiles(db: Db): Tile[] {
           href: `/folders/${s.target}`,
           subtitle: f ? f.path.normalize("NFC").replace(/^\/Users\/[^/]+/, "~") : "",
           sourceKind: f?.sourceKind,
-          warning: !f || f.state === "deleted" ? "폴더 없음" : f.sourceStatus === "offline" ? "오프라인" : undefined,
+          warning:
+            !f || f.state === "deleted" || (f.sourceStatus === "error" && f.sourceRoot.startsWith("/")) ? "폴더 없음" : f.sourceStatus === "offline" ? "오프라인" : undefined,
         };
       }
       if (s.kind === "project") {

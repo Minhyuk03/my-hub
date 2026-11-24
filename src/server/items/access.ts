@@ -33,6 +33,7 @@ export function resolveItemFile(db: Db, id: number): { ok: true; path: string; i
   if (!it) return { ok: false, status: 404, message: "항목을 찾을 수 없습니다." };
   if (it.item.state === "deleted") return { ok: false, status: 410, message: "삭제된 항목입니다." };
   if (it.source.status === "offline") return { ok: false, status: 503, message: "소스가 오프라인입니다." };
+  if (it.source.status === "error" && it.source.rootPath.startsWith("/")) return { ok: false, status: 503, message: "소스 폴더를 찾을 수 없습니다. (이동 또는 삭제됨)" };
   let real: string;
   try {
     real = fs.realpathSync(it.item.path);

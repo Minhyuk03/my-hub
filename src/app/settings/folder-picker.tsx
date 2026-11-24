@@ -5,11 +5,12 @@ import { useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { SOURCE_KIND_LABEL } from "@/lib/labels";
-import { addSourceAction, createFolderAction, listDir, previewNewFolder, type DirListing, type Shortcut } from "./actions";
+import { addSourceAction, createFolderAction, listDir, previewNewFolder, relocateSourceAction, type DirListing, type Shortcut } from "./actions";
 
 type Msg = { ok: boolean; message: string; warnings?: string[] } | null;
 
-export function FolderPicker({ shortcuts }: { shortcuts: Shortcut[] }) {
+/** relocate 를 주면 "소스 위치 바꾸기" 용: 고른 폴더를 그 소스의 새 위치로 정한다 (새 폴더 만들기는 숨김) */
+export function FolderPicker({ shortcuts, relocate }: { shortcuts: Shortcut[]; relocate?: { sourceId: number; name: string } }) {
   const [listing, setListing] = useState<DirListing | null>(null);
   const [msg, setMsg] = useState<Msg>(null);
   const [pending, start] = useTransition();
@@ -27,6 +28,11 @@ export function FolderPicker({ shortcuts }: { shortcuts: Shortcut[] }) {
   const add = () =>
     listing &&
     start(async () => {
+      if (relocate) {
+        if (!confirm(`'${relocate.name}' 의 위치를 아래 폴더로 바꿀까요?\n\n${listing.path}\n\n프로젝트 연결·태그는 그대로 두고, 새 위치를 다시 검사합니다. 새 위치에 없는 파일은 삭제로 표시됩니다.`)) return;
+        setMsg(await relocateSourceAction(relocate.sourceId, listing.path));
+        return;
+      }
       const r = await addSourceAction(listing.path);
       setMsg(r);
       if (r.ok) setListing(await listDir(listing.path));
@@ -73,10 +79,12 @@ export function FolderPicker({ shortcuts }: { shortcuts: Shortcut[] }) {
 
           <div className="flex flex-wrap items-center gap-2">
             <Button size="sm" onClick={add} disabled={pending || !listing.check.ok}>
-              이 폴더를 인덱싱에 추가
+              {relocate ? "이 폴더로 위치 바꾸기" : "이 폴더를 인덱싱에 추가"}
             </Button>
             {listing.check.ok ? (
-              <span className="text-xs text-muted-foreground">{SOURCE_KIND_LABEL[listing.check.kind!]} 소스로 추가됩니다.</span>
+              <span className="text-xs text-muted-foreground">
+                {relocate ? `${SOURCE_KIND_LABEL[listing.check.kind!]} 위치가 됩니다.` : `${SOURCE_KIND_LABEL[listing.check.kind!]} 소스로 추가됩니다.`}
+              </span>
             ) : (
               <span className="text-xs text-destructive">{listing.check.error}</span>
             )}
@@ -98,7 +106,7 @@ export function FolderPicker({ shortcuts }: { shortcuts: Shortcut[] }) {
             </div>
           )}
 
-          {listing.canCreateHere && (
+          {listing.canCreateHere && !relocate && (
             <div className="space-y-2 rounded-md bg-muted/50 p-2">
               <div className="flex flex-wrap items-center gap-2">
                 <FolderPlus className="size-4 text-muted-foreground" />

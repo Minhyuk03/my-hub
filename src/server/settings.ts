@@ -11,6 +11,8 @@ export const DEFAULT_SETTINGS = {
   excludedPatterns: DEFAULT_EXCLUDED_PATTERNS as string[],
   /** 민감 정보로 숨긴 폴더·파일 경로. 색인에 넣지 않아 목록·검색·그래프·AI 어디에도 나오지 않는다 (src/server/sensitive.ts) */
   sensitivePaths: [] as string[],
+  /** 이름에 이 낱말이 들어간 이미지·PDF 는 민감 정보로 숨긴다 (isSensitiveName) */
+  sensitiveNameWords: ["통장사본", "통장 사본", "신분증", "주민등록증", "운전면허증", "여권", "서명", "싸인", "사인", "도장", "인감", "가족관계", "등본"] as string[],
   deletedRetentionDays: 30,
   fullScanIntervalHours: 6,
   maxExtractMB: 50,

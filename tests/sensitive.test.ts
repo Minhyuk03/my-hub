@@ -5,7 +5,9 @@ import { chatCitations, chatMessages, chatThreads, folders, projectFolders, shor
 import { createProject, linkFolder } from "@/server/projects";
 import { search } from "@/server/search/query";
 import { hideSensitive, unhideSensitive } from "@/server/sensitive";
-import { getSettings } from "@/server/settings";
+import { getSettings, setSetting } from "@/server/settings";
+import { isExcludedFolder, isSensitiveName } from "@/server/sources/rules";
+import { purgeExcluded } from "@/server/sync/scanner";
 import { runScan, SENSITIVE_ANSWER } from "@/server/sync/scanner";
 import { addSource, allItems, deps, itemByPath, testDb, tmpDir, write } from "./helpers";
 
@@ -37,6 +39,19 @@ describe("민감 정보로 숨기기", () => {
     expect(allItems(db).map((i) => i.title).sort()).toEqual(["연봉", "회의"]);
     // 숨긴 뒤 돌아갈 곳: 상위 폴더(소스 맨 위)
     expect(r.ok && r.parentFolderId).toBe(folderId(db, root));
+  });
+
+  it("한글 폴더 이름이 NFD 여도 숨긴 뒤 돌아갈 상위 폴더를 찾는다", async () => {
+    const db = testDb();
+    const root = tmpDir("sens-nfd-");
+    write(root, "제출서류/정민혁 서류/신청서.hwp".normalize("NFD"), "신청서");
+    const src = addSource(db, root);
+    await runScan(db, src.id, deps());
+    const target = db.select().from(folders).all().find((f) => f.name === "정민혁 서류")!;
+    const parent = db.select().from(folders).all().find((f) => f.name === "제출서류")!;
+    const r = hideSensitive(db, { kind: "folder", id: target.id });
+    expect(r.ok && r.parentFolderId).toBe(parent.id);
+    expect(allItems(db)).toHaveLength(0);
   });
 
   it("파일 하나만 숨길 수 있고, 같은 폴더의 다른 파일은 그대로 보인다", async () => {
@@ -86,5 +101,43 @@ describe("민감 정보로 숨기기", () => {
     expect(getSettings(db).sensitivePaths).toEqual([]);
     await runScan(db, src.id, deps());
     expect(allItems(db)).toHaveLength(4);
+  });
+});
+
+describe("민감 정보 이름 규칙", () => {
+  const words = getSettings(testDb()).sensitiveNameWords;
+
+  it("이미지·PDF 이름에 낱말이 들어 있으면 걸리고, 문서·다른 이름은 걸리지 않는다", () => {
+    for (const n of ["통장사본_정민혁.pdf", "길민혁 통장사본.PDF", "김에스더싸인.png", "권찬희_서명.png", "신분증_정민혁.png", "주민등록증.jpg"]) expect(isSensitiveName(n, words), n).toBe(true);
+    // macOS 파일 이름(NFD)·Google Drive 경로 조각("이름#ID")
+    expect(isSensitiveName("통장사본.pdf".normalize("NFD"), words)).toBe(true);
+    expect(isSensitiveName("통장사본_정민혁.pdf#1p8N_LqvBRYmsue1K0oplbBeC2zNVJOOW", words)).toBe(true);
+    for (const n of ["회의록_김정민 이사님 서명 추가.hwp", "Design.ms14", "디자인 시안.png", "보고서.pdf", "서명"]) expect(isSensitiveName(n, words), n).toBe(false);
+    expect(isSensitiveName("통장사본.pdf", [])).toBe(false);
+  });
+
+  it("스캔할 때 걸리는 파일은 넣지 않고, 이미 들어 있던 것은 규칙을 저장하면 바로 빠진다", async () => {
+    const db = testDb();
+    const root = tmpDir("sens-name-");
+    write(root, "제출/통장사본_정민혁.pdf".normalize("NFD"), "%PDF");
+    write(root, "제출/참여신청서.hwp", "신청서");
+    write(root, "기타/김에스더싸인.png", "png");
+    const src = addSource(db, root);
+    await runScan(db, src.id, deps());
+    expect(allItems(db).map((i) => i.title)).toEqual(["참여신청서.hwp"]);
+
+    setSetting(db, "sensitiveNameWords", []);
+    await runScan(db, src.id, deps());
+    expect(allItems(db)).toHaveLength(3);
+    setSetting(db, "sensitiveNameWords", ["통장사본", "싸인"]);
+    expect(purgeExcluded(db)).toBe(2);
+    expect(allItems(db).map((i) => i.title)).toEqual(["참여신청서.hwp"]);
+  });
+
+  it("Google Drive·Notion 의 숨긴 폴더는 원본에서 이름을 바꿔도 ID 로 계속 숨긴다", () => {
+    const hidden = ["gdrive:/ROOT/KMOU#1H5mu8myftTXoGvp/제출 서류#1L3zNVtRFMPIEQct"];
+    expect(isExcludedFolder("gdrive:/ROOT/KMOU#1H5mu8myftTXoGvp/제출 서류#1L3zNVtRFMPIEQct/통장.pdf#1p8N", hidden)).toBe(true);
+    expect(isExcludedFolder("gdrive:/ROOT/KMOU#1H5mu8myftTXoGvp/옛 서류#1L3zNVtRFMPIEQct/신청서.hwp#9x", hidden)).toBe(true);
+    expect(isExcludedFolder("gdrive:/ROOT/KMOU#1H5mu8myftTXoGvp/다른 폴더#2AAAAAAAAAAAAAAA/a.pdf#1", hidden)).toBe(false);
   });
 });

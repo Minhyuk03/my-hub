@@ -25,7 +25,8 @@ function locate(db: Db, t: HideTarget): { path: string; sourceId: number; root: 
   const src = db.select({ root: sources.rootPath }).from(sources).where(eq(sources.id, row.sourceId)).get();
   if (!src) return null;
   const p = row.path.normalize("NFC");
-  return { path: p, sourceId: row.sourceId, root: src.root.normalize("NFC"), parentPath: p.slice(0, p.lastIndexOf("/")) };
+  // 상위 폴더는 DB 에 저장된 그대로의 경로(NFD 일 수 있음)로 찾는다
+  return { path: p, sourceId: row.sourceId, root: src.root.normalize("NFC"), parentPath: row.path.slice(0, row.path.lastIndexOf("/")) };
 }
 
 export function hideSensitive(db: Db, t: HideTarget): HideResult {

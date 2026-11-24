@@ -11,7 +11,7 @@ import { removeItemText, writeItemText } from "../search/index-writer";
 import { nfc } from "../search/text";
 import { excludedPaths, getSettings, type Settings } from "../settings";
 import { checkAvailability, realMountEnv, type MountEnv } from "../sources/availability";
-import { isExcludedFolder, isExcludedName, isInside, skippedBySource } from "../sources/rules";
+import { isExcludedFolder, isExcludedName, isInside, isSensitiveName, skippedBySource } from "../sources/rules";
 import { aliasAll, tagAliases } from "../tags";
 
 type Source = typeof sources.$inferSelect;
@@ -142,6 +142,7 @@ export async function runScan(db: Db, sourceId: number, deps: ScanDeps, scopePat
           cursor.stack.push(p);
         } else if (ent.isFile()) {
           if (skippedBySource(src.config, p)) continue;
+          if (isSensitiveName(ent.name, settings.sensitiveNameWords)) continue; // 민감 정보 이름 규칙 (통장사본·신분증·서명 등)
           try {
             files.push({ p, st: await fsp.stat(p) });
           } catch {
@@ -484,14 +485,15 @@ export const SENSITIVE_ANSWER = "민감 정보로 숨긴 자료를 근거로 한
 /**
  * 제외 폴더·제외 이름에 해당하는 항목을 색인에서 지운다 (실제 파일은 건드리지 않음).
  * 제외는 삭제가 아니므로 deleted 로 표시하지 않고 바로 뺀다. 프로젝트·즐겨찾기에 연결된 폴더 기록은 남긴다.
- * 민감 정보로 숨긴 곳(settings.sensitivePaths)은 흔적도 남기지 않는다:
+ * 민감 정보로 숨긴 곳(settings.sensitivePaths)과 이름 규칙(settings.sensitiveNameWords)에 걸린 파일은 흔적도 남기지 않는다:
  * 채팅 인용·그 인용을 쓴 AI 답변·정리 제안·프로젝트 연결·즐겨찾기·외부 금지 지정까지 지운다.
  */
 export function purgeExcluded(db: Db, settings: Settings = getSettings(db)): number {
   const srcList = db.select({ id: sources.id, root: sources.rootPath, config: sources.config }).from(sources).all();
   const srcRoots = new Map(srcList.map((s) => [s.id, s.root]));
   const srcConfig = new Map(srcList.map((s) => [s.id, s.config]));
-  const excludedItem = (p: string, sourceId: number) => excluded(p, sourceId) || skippedBySource(srcConfig.get(sourceId), p);
+  const sensitiveName = (p: string) => isSensitiveName(p.slice(p.lastIndexOf("/") + 1), settings.sensitiveNameWords);
+  const excludedItem = (p: string, sourceId: number) => excluded(p, sourceId) || skippedBySource(srcConfig.get(sourceId), p) || sensitiveName(p);
   const excluded = (p: string, sourceId: number) => {
     if (isExcludedFolder(p, excludedPaths(settings))) return true;
     const root = srcRoots.get(sourceId);
@@ -505,7 +507,7 @@ export function purgeExcluded(db: Db, settings: Settings = getSettings(db)): num
   const sensitive = (p: string) => isExcludedFolder(p, settings.sensitivePaths);
   db.transaction((tx) => {
     for (const r of rows) {
-      if (sensitive(r.path)) {
+      if (sensitive(r.path) || sensitiveName(r.path)) {
         tx.run(sql`UPDATE chat_messages SET content = ${SENSITIVE_ANSWER} WHERE role = 'assistant' AND id IN (SELECT message_id FROM chat_citations WHERE item_id = ${r.id})`);
         tx.run(sql`DELETE FROM chat_citations WHERE item_id = ${r.id}`);
         tx.run(sql`DELETE FROM para_moves WHERE item_id = ${r.id}`);
