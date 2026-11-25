@@ -42,7 +42,7 @@ Mac mini 에서 상시 실행되고, 노트북·아이폰에서는 Tailscale 로
 
 ## 기술 스택
 
-Next.js 16 (App Router) · TypeScript · Tailwind CSS 4 · shadcn/ui · SQLite (better-sqlite3, Drizzle, FTS5, sqlite-vec) · Ollama (`bge-m3` 임베딩, `gemma3:4b` 대화, `exaone3.5:2.4b` 태그) · launchd · Tailscale · Vitest
+Next.js 16 (App Router) · TypeScript · Tailwind CSS 4 · shadcn/ui · SQLite (better-sqlite3, Drizzle, FTS5, sqlite-vec) · Ollama (`bge-m3` 임베딩, `gemma4:e4b` 대화·태그) · launchd · Tailscale · Vitest
 
 ## 요구 사항
 
@@ -85,7 +85,7 @@ npm run service:install                              # 빌드 → DB 준비 → 
    ```
 4. (AI 기능) Ollama 를 설치하고 모델을 받습니다:
    ```bash
-   ollama pull bge-m3 && ollama pull gemma3:4b && ollama pull exaone3.5:2.4b
+   ollama pull bge-m3 && ollama pull gemma4:e4b
    ```
    그다음 AI 정리 화면에서 켭니다.
 
