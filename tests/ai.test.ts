@@ -25,7 +25,7 @@ function fakeOllama(opts: { models?: string[]; down?: boolean; chat?: (prompt: s
   const f = (async (url: string | URL | Request, init?: RequestInit) => {
     if (opts.down) throw new TypeError("fetch failed");
     const p = new URL(String(url)).pathname;
-    if (p === "/api/tags") return Response.json({ models: (opts.models ?? ["bge-m3:latest", "exaone3.5:2.4b"]).map((name) => ({ name })) });
+    if (p === "/api/tags") return Response.json({ models: (opts.models ?? ["bge-m3:latest", "gemma4:e4b"]).map((name) => ({ name })) });
     const body = JSON.parse(String(init?.body ?? "{}"));
     calls.push({ path: p, body });
     if (p === "/api/embed") return Response.json({ embeddings: (body.input as string[]).map(vec) });

@@ -45,7 +45,7 @@ export const DEFAULT_SETTINGS = {
   gdriveTestingMode: true as boolean,
   /** 로컬 AI 자동 분류 (Ollama). 제안만 만들고, 수락해야 적용 */
   aiEnabled: false as boolean,
-  aiChatModel: "exaone3.5:2.4b" as string,
+  aiChatModel: "gemma4:e4b" as string,
   aiEmbedModel: "bge-m3" as string,
   /** 한 번에 태그를 제안할 문서 수 (1분마다 실행) */
   aiBatchSize: 10 as number,
@@ -64,8 +64,9 @@ export const DEFAULT_SETTINGS = {
   /** 홈 일정: 숨길 캘린더 이름 */
   calendarHidden: [] as string[],
   /** AI 채팅 (Phase 5) */
-  /** 측정 결과(scripts/ai/bench-chat.ts): 근거 부족·출처 표시·가짜 지시 무시를 가장 잘 지킴 */
-  chatLocalModel: "gemma3:4b" as string,
+  /** 측정 결과(scripts/ai/bench-chat.ts, 2026-11): 근거 부족·출처 표시·가짜 지시 무시를 모두 지키고 16GB 에서 가장 빠름.
+   *  태그와 같은 모델을 써서 메모리에 하나만 올린다 (bge-m3 와 함께 약 10.7GB) */
+  chatLocalModel: "gemma4:e4b" as string,
   chatClaudeModel: "claude-sonnet-5-5" as string,
   /** 비어 있으면 OpenAI 를 쓰기 전에 설정에서 고른다 */
   chatOpenAiModel: "" as string,

@@ -27,7 +27,7 @@ LINKS="$HOME/my-hub"
 BIN_DIR="$HOME/.local/bin"
 UID_=$(id -u)
 # 허브가 기본으로 쓰는 모델 (태그·요약 / 임베딩 / 채팅)
-HUB_MODELS="exaone3.5:2.4b bge-m3:latest gemma3:4b"
+HUB_MODELS="gemma4:e4b bge-m3:latest"
 
 if [ -t 1 ]; then G=$'\033[32m'; R=$'\033[31m'; Y=$'\033[33m'; B=$'\033[1m'; D=$'\033[2m'; N=$'\033[0m'; else G=; R=; Y=; B=; D=; N=; fi
 ok()   { echo "  ${G}✓${N} $*"; }
@@ -128,7 +128,7 @@ cmd_models() {
   echo "$json" | HUB_MODELS="$HUB_MODELS" "$NODE" -e '
     let s=""; process.stdin.on("data",d=>s+=d).on("end",()=>{
       const used=new Set(process.env.HUB_MODELS.split(" "));
-      const role={"exaone3.5:2.4b":"태그·요약","bge-m3:latest":"검색 임베딩","gemma3:4b":"채팅(기본)"};
+      const role={"gemma4:e4b":"태그·요약·채팅","bge-m3:latest":"검색 임베딩"};
       for (const m of JSON.parse(s).models||[]) {
         const gb=(m.size/1e9).toFixed(1)+"GB";
         console.log("  "+(used.has(m.name)?"●":"○")+" "+m.name.padEnd(26)+gb.padStart(7)+"  "+(role[m.name]||""));
